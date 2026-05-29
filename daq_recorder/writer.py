@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 import time
@@ -68,6 +68,7 @@ class HDF5Recorder:
         self._file.attrs["sample_index_start"] = 0
         self._file.attrs["sample_count"] = 0
         self._file.attrs["sample_index_is_contiguous"] = True
+        self._file.attrs["recording_complete"] = False
 
         analog_group = self._file.create_group("analog")
         digital_group = self._file.create_group("digital")
@@ -207,6 +208,8 @@ class HDF5Recorder:
     def close(self) -> None:
         if self._file is not None:
             self._file.attrs["sample_count"] = self._sample_index
+            self._file.attrs["recording_complete"] = True
+            self._file.attrs["closed_at"] = datetime.now().isoformat()
             self._file.flush()
             self._file.close()
             self._file = None

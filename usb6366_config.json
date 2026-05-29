@@ -111,5 +111,6 @@
                           "ai:ai1",
                           "ai:ai2"
                       ],
-    "analog_storage":  "int16_scaled"
+    "analog_storage":  "int16_scaled",
+    "max_duration_s":  0
 }

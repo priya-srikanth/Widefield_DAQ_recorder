@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -301,6 +301,8 @@ class RecorderApp(tk.Tk):
         self._digital_high_samples: np.ndarray | None = None
         self._digital_last: np.ndarray | None = None
         self._resize_after_id: str | None = None
+        self._max_samples: int | None = None
+        self._auto_stopping = False
 
         self._build_ui()
         self._load_config_into_ui(self.config_obj)
@@ -358,6 +360,7 @@ class RecorderApp(tk.Tk):
         self.rate_var = tk.StringVar()
         self.block_var = tk.StringVar()
         self.display_seconds_var = tk.StringVar()
+        self.max_duration_var = tk.StringVar()
         self.output_dir_var = tk.StringVar()
         self.file_prefix_var = tk.StringVar()
         self.analog_storage_var = tk.StringVar(value="int16_scaled")
@@ -368,6 +371,7 @@ class RecorderApp(tk.Tk):
             ("Sample rate (Hz)", self.rate_var),
             ("Block size", self.block_var),
             ("Display seconds", self.display_seconds_var),
+            ("Max duration (s)", self.max_duration_var),
             ("Output directory", self.output_dir_var),
             ("File prefix", self.file_prefix_var),
         ]
@@ -537,6 +541,8 @@ class RecorderApp(tk.Tk):
         self.rate_var.set(str(cfg.sample_rate_hz))
         self.block_var.set(str(cfg.block_size))
         self.display_seconds_var.set(str(cfg.display_seconds))
+        max_duration = getattr(cfg, "max_duration_s", 0.0)
+        self.max_duration_var.set("" if max_duration <= 0 else str(max_duration))
         self.output_dir_var.set(cfg.output_directory)
         self.file_prefix_var.set(getattr(cfg, "file_prefix", "daq"))
         self.analog_storage_var.set(getattr(cfg, "analog_storage", "int16_scaled"))
@@ -611,6 +617,7 @@ class RecorderApp(tk.Tk):
             sample_rate_hz=float(self.rate_var.get()),
             block_size=int(self.block_var.get()),
             display_seconds=float(self.display_seconds_var.get()),
+            max_duration_s=float(self.max_duration_var.get().strip() or 0.0),
             output_directory=self.output_dir_var.get().strip(),
             file_prefix=self.file_prefix_var.get().strip(),
             analog_storage=self.analog_storage_var.get().strip() or "int16_scaled",
@@ -770,12 +777,18 @@ class RecorderApp(tk.Tk):
 
         self._pending_plot_chunks.clear()
         self._last_plot_update = 0.0
+        self._max_samples = int(round(cfg.max_duration_s * cfg.sample_rate_hz)) if cfg.max_duration_s > 0 else None
+        self._auto_stopping = False
         self.running = True
         self.recording = record
         self.sample_count_var.set("0")
         self._reset_analog_stats(cfg)
         self._reset_digital_stats(cfg)
-        self.status_var.set("Running (recording)" if record else "Running (play)")
+        if self._max_samples is None:
+            self.status_var.set("Running (recording)" if record else "Running (play)")
+        else:
+            duration_text = f" for {cfg.max_duration_s:g} s"
+            self.status_var.set(("Running (recording)" if record else "Running (play)") + duration_text)
 
         def callback(chunk: DataChunk | Exception) -> None:
             self.data_queue.put(chunk)
@@ -802,6 +815,8 @@ class RecorderApp(tk.Tk):
             self.writer = None
         self.running = False
         self.recording = False
+        self._max_samples = None
+        self._auto_stopping = False
         self.status_var.set("Stopped")
 
     def _poll_queue(self) -> None:
@@ -836,6 +851,9 @@ class RecorderApp(tk.Tk):
         chunk = chunks[-1]
         total = chunk.sample_index + (chunk.analog.shape[0] if chunk.analog.size else chunk.digital.shape[0])
         self.sample_count_var.set(str(total))
+        if self._max_samples is not None and total >= self._max_samples and not self._auto_stopping:
+            self._auto_stopping = True
+            self.after_idle(self._finish_finite_session)
 
         self._pending_plot_chunks.extend(chunks)
         now = time.perf_counter()
@@ -856,6 +874,12 @@ class RecorderApp(tk.Tk):
             elif kind == "digital" and source_index < digital.shape[1]:
                 plot.push(digital[:, source_index])
 
+
+    def _finish_finite_session(self) -> None:
+        if not self.running:
+            return
+        self.stop()
+        self.status_var.set("Stopped after finite session duration")
     def _handle_backend_error(self, exc: Exception) -> None:
         if not self.running:
             return

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
@@ -31,6 +31,7 @@ class RecorderConfig:
     sample_rate_hz: float = 5000.0
     block_size: int = 250
     display_seconds: float = 10.0
+    max_duration_s: float = 0.0
     output_directory: str = r"C:\Data\daq_recordings"
     file_prefix: str = "daq"
     analog_storage: str = "int16_scaled"
@@ -68,6 +69,7 @@ class RecorderConfig:
             sample_rate_hz=float(data.get("sample_rate_hz", 5000.0)),
             block_size=int(data.get("block_size", 250)),
             display_seconds=float(data.get("display_seconds", 10.0)),
+            max_duration_s=float(data.get("max_duration_s", data.get("duration_s", 0.0)) or 0.0),
             output_directory=data.get("output_directory", r"C:\Data\daq_recordings"),
             file_prefix=data.get("file_prefix", data.get("filename_prefix", "daq")),
             analog_storage=data.get("analog_storage", "int16_scaled"),

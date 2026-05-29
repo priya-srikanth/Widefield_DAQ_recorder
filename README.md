@@ -113,6 +113,10 @@ On devices that support it, DI start can be aligned to the AI start trigger. On 
 
 The current validated path is the NI USB-6366 on `Dev2`. Earlier PCIe-6259/BNC-2110 work remains useful context, but is not the default target for this repo anymore.
 
+## Finite Session Duration
+
+The `Max duration (s)` field controls optional finite sessions. Leave it blank or set it to `0` for continuous acquisition. Set it to a positive number to auto-stop once that many seconds have been acquired. This works in both Play and Record modes.
+
 ## HDF5 Layout
 
 Each recording session writes one self-contained `.h5` file. No JSON sidecar is required; the active config is stored in the root `config_json` attribute.
@@ -149,6 +153,23 @@ Digital unpacking:
 ```python
 digital = np.unpackbits(packed_samples, axis=1, count=n_digital_channels, bitorder="little")
 ```
+
+## Loading Recordings
+
+Use `daq_recorder.io.load_recording()` to load either old or new recorder HDF5 files without manually handling storage details:
+
+```python
+from daq_recorder.io import load_recording
+
+rec = load_recording(r"E:\DAQ_recorder_output\example.h5")
+analog_volts = rec["analog"]
+digital = rec["digital"]
+time_s = rec["time_s"]
+analog_names = rec["analog_channel_names"]
+digital_names = rec["digital_channel_names"]
+```
+
+The loader reconstructs `int16_scaled` analog data back into volts and unpacks packed digital bits into one 0/1 column per digital channel.
 
 ## Storage And Compression
 

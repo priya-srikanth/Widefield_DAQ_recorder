@@ -111,5 +111,6 @@
                           "di:port0/line5",
                           "di:port0/line6"
                       ],
-    "analog_storage":  "int16_scaled"
+    "analog_storage":  "int16_scaled",
+    "max_duration_s":  0
 }
