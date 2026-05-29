@@ -1,34 +1,80 @@
 # Widefield DAQ Recorder
 
-Python NI-DAQ recorder intended to cover the subset of WaveSurfer functionality needed for the widefield + behavior rig:
+Python NI-DAQ recorder for the widefield imaging + behavior rig. It replaces the subset of WaveSurfer used here: continuous synchronized DAQ recording, live strip charts, simple controls, saved config, and HDF5 output.
 
-- continuous AI + DI recording from one NI device
-- synchronized analog and digital acquisition
-- live per-channel visualization
-- `Play`, `Record`, and `Stop`
-- JSON config save/load
-- HDF5 output
+The current working hardware target is an **NI USB-6366 (BNC), configured as `Dev2`** on the DAQ computer.
 
-## Current design goals
+## Current Design Goals
 
-- NI multifunction DAQ with one device, usually `Dev1`
-- analog channels for lick, LEDs, treadmill, and optional reward
-- digital channels for behavior TTLs and `PCO` exposure
-- simple, inspectable file format
-- lightweight Tk GUI with no heavy GUI dependencies
+- Record from one NI multifunction DAQ, currently the USB-6366 on `Dev2`.
+- Use the AI sample clock as the timing master.
+- Record synchronized analog and digital channels into one self-contained `.h5` file.
+- Provide a lightweight Tk GUI with `Play`, `Record`, `Stop`, config save/load, and live per-channel visualization.
+- Keep the app focused on recording only; cameras, LEDs, and behavior control are handled by other systems.
 
-## Files
+## Current Rig Config
 
-- `default_config.json`
-- `requirements.txt`
-- `run_daq_recorder.py`
-- `diagnose_hardware.py`
-- `launch_hardware.bat`
-- `launch_simulate.bat`
+Default USB-6366 config: `usb6366_config.json`
 
-## Install dependencies
+Analog channels:
 
-In the Python environment you plan to use on the DAQ machine:
+- `ai0` = `lick_analog`
+- `ai1` = `led405_ttl`
+- `ai2` = `led470_ttl`
+- `ai3` = `treadmill`
+- `ai4` = `reward_ttl`
+
+Digital channels:
+
+- `port0/line0` = `sync`
+- `port0/line1` = `cue`
+- `port0/line2` = `trial_start`
+- `port0/line3` = `spout_strobe`
+- `port0/line4` = `spout_bit0`
+- `port0/line5` = `spout_bit1`
+- `port0/line6` = `spout_bit2`
+- `port0/line7` = `pco_exposure`
+
+Typical settings:
+
+- sample rate: `5000 Hz`
+- block size: `1000`
+- display window: `60 s`
+- default output folder: `E:/DAQ_recorder_output`
+- analog storage: `int16_scaled`
+
+## Repository Files
+
+Core app:
+
+- `run_daq_recorder.py` - main GUI launcher. Use this for normal Play/Record/Stop operation.
+- `daq_recorder/config.py` - dataclasses and JSON load/save helpers for recorder configuration.
+- `daq_recorder/acquisition.py` - NI-DAQmx acquisition workers plus simulated acquisition mode.
+- `daq_recorder/writer.py` - HDF5 writer, compact analog/digital storage, metadata, and periodic flushes.
+- `daq_recorder/gui.py` - Tk GUI, live strip charts, controls, config editing, and display ordering.
+
+Configs:
+
+- `usb6366_config.json` - current working USB-6366 rig config for `Dev2`.
+- `20260529_config.json` - saved working config snapshot from the initial USB-6366 testing day.
+- `default_config.json` - general default config; currently also aligned with the USB-6366 setup.
+
+Convenience launchers:
+
+- `launch_usb6366_hardware.bat` - launches the GUI with `usb6366_config.json` in hardware mode.
+- `launch_hardware.bat` - generic hardware launcher using the default config.
+- `launch_simulate.bat` - launches simulated acquisition for GUI testing without NI hardware.
+
+Diagnostics and utilities:
+
+- `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
+- `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
+- `requirements.txt` - Python package dependencies.
+- `.gitignore` - excludes HDF5 recordings, Python caches, logs, and local environment folders.
+
+## Install Dependencies
+
+In the Python environment used on the DAQ machine:
 
 ```powershell
 pip install -r C:\Github\Widefield_DAQ_recorder\requirements.txt
@@ -44,51 +90,84 @@ The GUI uses standard-library `tkinter`.
 
 ## Launch
 
+Recommended USB-6366 hardware launch:
+
 ```powershell
-cd C:\Github\Widefield_DAQ_recorder
-python .\run_daq_recorder.py --hardware
+cd "C:\Github\Widefield_DAQ_recorder"
+& "C:\Users\Optiplex 7090 Tower\AppData\Local\Programs\Python\Python313\python.exe" ".\run_daq_recorder.py" --config ".\usb6366_config.json" --hardware
 ```
 
-Optional:
+Other useful commands:
 
 ```powershell
 python .\run_daq_recorder.py --simulate
-python .\run_daq_recorder.py --config C:\path\to\config.json
+python .\run_daq_recorder.py --config .\usb6366_config.json --hardware
 python .\diagnose_hardware.py --seconds 10
 ```
 
-## Important DAQ note for M-series
+## Timing Notes
 
-This app assumes an NI M-series style synchronization approach in which:
+The app uses analog input acquisition as the master timing source. Digital input is hardware-timed from the device AI sample clock so analog and digital samples share one sample timeline.
 
-- analog input uses the onboard AI sample clock
-- digital input is hardware-timed from `/<device>/ai/SampleClock`
-- when supported, digital input start is aligned to `/<device>/ai/StartTrigger`
-- on devices that reject DI start triggers, DI starts before AI and remains aligned because the DI task is clocked by the AI sample clock
+On devices that support it, DI start can be aligned to the AI start trigger. On devices that reject a DI start trigger, the app starts DI before AI; samples remain aligned because DI is still clocked by the AI sample clock.
 
-For PCIe-6259/M-series style boards, digital lines on one port are read as one port-wide hardware-timed channel and unpacked into individual 0/1 traces in software.
+The current validated path is the NI USB-6366 on `Dev2`. Earlier PCIe-6259/BNC-2110 work remains useful context, but is not the default target for this repo anymore.
 
-## HDF5 layout
+## HDF5 Layout
 
-The recorder writes:
+Each recording session writes one self-contained `.h5` file. No JSON sidecar is required; the active config is stored in the root `config_json` attribute.
 
-- `/analog/samples` shape `(n_samples, n_ai)`
-- `/digital/samples` shape `(n_samples, n_di)`
+Current compact layout:
+
+- `/analog/samples_int16` for `int16_scaled` analog storage
+- `/analog/int16_scale_volts_per_count`
+- `/analog/int16_offset_volts`
 - `/analog/channel_names`
-- `/digital/channel_names`
 - `/analog/physical_channels`
-- `/digital/physical_channels`
-- `/analog/scale`
 - `/analog/input_range`
-- root metadata attrs including:
-  - device
-  - sample rate
-  - start time
-  - config JSON
+- `/digital/packed_samples` with digital line bits packed into `uint8`
+- `/digital/channel_names`
+- `/digital/physical_channels`
+- root attrs:
+  - `device`
+  - `sample_rate_hz`
+  - `sample_count`
+  - `sample_index_start`
+  - `sample_index_is_contiguous`
+  - `created_at`
+  - `file_prefix`
+  - `config_json`
 
-## Current limitations
+Analog reconstruction formula:
 
-- Hardware smoke-tested on `Dev1` with 5 AI and 8 DI channels at 5000 Hz.
-- It does not yet provide WaveSurfer-style trigger protocols or stimulus generation.
-- It is aimed at continuous acquisition and simple session recording.
-- Digital traces are rendered as 0/1 line plots, not staircase plots.
+```text
+volts = raw_int16 * int16_scale_volts_per_count + int16_offset_volts
+```
+
+Digital unpacking:
+
+```python
+digital = np.unpackbits(packed_samples, axis=1, count=n_digital_channels, bitorder="little")
+```
+
+## Storage And Compression
+
+The GUI/config supports two analog storage modes:
+
+- `int16_scaled` - default. Analog voltages are quantized into signed 16-bit integers using each channel's configured min/max range. The HDF5 stores the scale and offset needed to reconstruct volts. This is much smaller and was tested on representative PS92 data with sub-0.1 mV reconstruction error and unchanged lick/reward threshold event counts.
+- `float32` - stores analog samples directly as 32-bit volts. This is larger, but useful as a conservative fallback while debugging.
+
+Both analog modes use HDF5 `lzf` compression with shuffle enabled. `lzf` is lossless and fast, so it should reduce file size without adding much CPU load. Digital data is always packed into bits and stored with `lzf` compression.
+
+The old writer format stored unpacked digital columns and a full per-sample `sample_index` dataset. New files omit that redundant index and instead store `sample_rate_hz`, `sample_count`, and `sample_index_start` metadata.
+
+## Crash Safety
+
+During recording, the writer updates `sample_count` and flushes the HDF5 file about every 2 seconds, plus once on clean close. This improves recoverability if the GUI or Python process crashes. A clean `Stop` is still preferred whenever possible.
+
+## Current Limitations
+
+- Focused on continuous acquisition and simple session recording.
+- No WaveSurfer-style stimulus generation or trigger protocol system.
+- No camera, LED, or behavior control.
+- HDF5 files created by older versions of this app may use `/analog/samples`, `/digital/samples`, and `/sample_index` instead of the compact layout above.
