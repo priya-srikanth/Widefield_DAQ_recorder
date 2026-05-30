@@ -113,6 +113,11 @@ On devices that support it, DI start can be aligned to the AI start trigger. On 
 
 The current validated path is the NI USB-6366 on `Dev2`. Earlier PCIe-6259/BNC-2110 work remains useful context, but is not the default target for this repo anymore.
 
+## Display Order
+
+Checked channels in the Analog/Digital channel tables define what is acquired and recorded. The Display Order box defines which enabled channels are visible in the live GUI and in what order. Removing a channel from Display Order hides it from the live display but does not stop it from being recorded, as long as it remains checked in the channel table. Use `Use Current Channels` to repopulate the display list with all enabled channels.
+
+The top status bar shows sample count and elapsed recording/play time in minutes.
 ## Finite Session Duration
 
 The `Max duration (s)` field controls optional finite sessions. Leave it blank or set it to `0` for continuous acquisition. Set it to a positive number to auto-stop once that many seconds have been acquired. This works in both Play and Record modes.

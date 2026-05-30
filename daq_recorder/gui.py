@@ -290,6 +290,7 @@ class RecorderApp(tk.Tk):
         self.status_var = tk.StringVar(value="Ready")
         self.file_var = tk.StringVar(value="")
         self.sample_count_var = tk.StringVar(value="0")
+        self.elapsed_min_var = tk.StringVar(value="0.00")
         self.analog_stats_var = tk.StringVar(value="")
         self.digital_stats_var = tk.StringVar(value="")
         self._last_plot_update = 0.0
@@ -330,6 +331,8 @@ class RecorderApp(tk.Tk):
         ttk.Label(status, textvariable=self.status_var).pack(side=tk.LEFT, padx=(4, 18))
         ttk.Label(status, text="Samples:").pack(side=tk.LEFT)
         ttk.Label(status, textvariable=self.sample_count_var).pack(side=tk.LEFT, padx=(4, 18))
+        ttk.Label(status, text="Elapsed (min):").pack(side=tk.LEFT)
+        ttk.Label(status, textvariable=self.elapsed_min_var).pack(side=tk.LEFT, padx=(4, 18))
         ttk.Label(status, text="Recording file:").pack(side=tk.LEFT)
         ttk.Label(status, textvariable=self.file_var).pack(side=tk.LEFT, padx=(4, 0))
 
@@ -531,10 +534,11 @@ class RecorderApp(tk.Tk):
                 selected.append(candidates[key])
                 used.add(key)
 
-        for key in self._default_display_order(cfg):
-            if key in candidates and key not in used:
-                selected.append(candidates[key])
-                used.add(key)
+        if not cfg.display_order:
+            for key in self._default_display_order(cfg):
+                if key in candidates and key not in used:
+                    selected.append(candidates[key])
+                    used.add(key)
         return selected
     def _load_config_into_ui(self, cfg: RecorderConfig) -> None:
         self.device_var.set(cfg.device)
@@ -782,6 +786,7 @@ class RecorderApp(tk.Tk):
         self.running = True
         self.recording = record
         self.sample_count_var.set("0")
+        self.elapsed_min_var.set("0.00")
         self._reset_analog_stats(cfg)
         self._reset_digital_stats(cfg)
         if self._max_samples is None:
@@ -817,6 +822,7 @@ class RecorderApp(tk.Tk):
         self.recording = False
         self._max_samples = None
         self._auto_stopping = False
+        self.elapsed_min_var.set(self.elapsed_min_var.get() or "0.00")
         self.status_var.set("Stopped")
 
     def _poll_queue(self) -> None:
@@ -851,6 +857,8 @@ class RecorderApp(tk.Tk):
         chunk = chunks[-1]
         total = chunk.sample_index + (chunk.analog.shape[0] if chunk.analog.size else chunk.digital.shape[0])
         self.sample_count_var.set(str(total))
+        sample_rate = max(float(getattr(self.config_obj, "sample_rate_hz", 1.0)), 1e-9)
+        self.elapsed_min_var.set(f"{total / sample_rate / 60.0:.2f}")
         if self._max_samples is not None and total >= self._max_samples and not self._auto_stopping:
             self._auto_stopping = True
             self.after_idle(self._finish_finite_session)
