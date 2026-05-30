@@ -68,8 +68,10 @@ Convenience launchers:
 Diagnostics and utilities:
 
 - `arduino/treadmill_rh/treadmill_rh.ino` - Teensy treadmill encoder firmware that outputs speed on DAC/A14 for DAQ recording.
+- `arduino/stim_camera_trigger_dual_wavelength/stim_camera_trigger_dual_wavelength.ino` - Teensy camera/dual-wavelength trigger firmware used by labcams excitation triggering.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
+- `labcams/labcams_widefield_pco_only.json` - latest labcams config found for the PCO-only widefield camera setup.
 - `requirements.txt` - Python package dependencies.
 - `.gitignore` - excludes HDF5 recordings, Python caches, logs, and local environment folders.
 
