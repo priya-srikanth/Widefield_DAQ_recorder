@@ -7,9 +7,9 @@
 //   @C -> @C_1 or @C_2
 //   @M_<mode>, @N, @S
 
-const byte PIN_CAM_EXPOSURE = 2;   // PCO exposure TTL into Teensy interrupt pin
-const byte PIN_SYNC0        = 3;   // optional behavior/global sync into Teensy
-const byte PIN_SYNC1        = 4;   // unused by labcams, kept for wiring compatibility
+const byte PIN_CAM_EXPOSURE = 3;   // PCO exposure TTL into Teensy interrupt pin
+const byte PIN_SYNC0        = 4;   // optional behavior/global sync into Teensy
+const byte PIN_SYNC1        = 2;   // unused by labcams, kept available for spare sync
 const byte PIN_LED0_TRIGGER = 5;   // LED0 TTL out, advertised as 470nm by labcams
 const byte PIN_LED1_TRIGGER = 6;   // LED1 TTL out, advertised as 405nm by labcams
 const byte PIN_GPIO         = 7;   // optional exposure mirror for DAQ/camera timing
