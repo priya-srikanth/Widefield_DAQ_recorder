@@ -83,8 +83,8 @@ class UnavailableCam:
 _ORIGINAL_INIT_PCO_CAM = None
 
 
-def apply_patches() -> None:
-    """Patch upstream labcams in memory for this process only."""
+def _patch_offline_pco() -> None:
+    """Allow opt-in PCO placeholder cameras when hardware is unavailable."""
 
     global _ORIGINAL_INIT_PCO_CAM
     import labcams.cams as cams
@@ -112,6 +112,140 @@ def apply_patches() -> None:
 
     cams.Camera._init_pco_cam = _init_pco_cam_with_offline_fallback
     cams.Camera._ps_offline_pco_patch = True
+
+
+def _patch_alignment_preview() -> None:
+    """Add a ScanImage-like reference overlay dock to the labcams GUI."""
+
+    import labcams.gui as gui
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLabel,
+        QFileDialog,
+        QComboBox,
+        QDockWidget,
+    )
+    from PyQt5.QtCore import Qt
+
+    if getattr(gui.LabCamsGUI, "_ps_alignment_patch", False):
+        return
+
+    original_init_ui = gui.LabCamsGUI.initUI
+
+    def init_ui_with_alignment(self):
+        original_init_ui(self)
+        self._ps_add_alignment_dock()
+
+    def add_alignment_dock(self):
+        if not getattr(self, "camwidgets", None):
+            return
+
+        dock = QDockWidget("Alignment Preview", self)
+        dock.setObjectName("ps_alignment_preview")
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        info = QLabel(
+            "Load a previous alignment snapshot as a red reference overlay; "
+            "live preview is shown in green. This affects display only."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        row = QHBoxLayout()
+        camera_select = QComboBox()
+        for i, cam in enumerate(self.cams):
+            camera_select.addItem("{0}: {1}".format(i, cam.name), i)
+        row.addWidget(QLabel("Camera"))
+        row.addWidget(camera_select)
+        layout.addLayout(row)
+
+        status = QLabel("No reference loaded")
+        status.setWordWrap(True)
+        layout.addWidget(status)
+
+        button_row = QHBoxLayout()
+        load_button = QPushButton("Load Reference")
+        clear_button = QPushButton("Clear")
+        button_row.addWidget(load_button)
+        button_row.addWidget(clear_button)
+        layout.addLayout(button_row)
+
+        def current_widget():
+            idx = int(camera_select.currentData())
+            return self.camwidgets[idx]
+
+        def _load_reference_image(cam_widget, filename):
+            try:
+                from tifffile import imread
+                reference = imread(filename)
+            except Exception:
+                from PIL import Image
+                reference = np.asarray(Image.open(filename))
+
+            reference = np.asarray(reference).squeeze()
+            if reference.ndim == 3:
+                if reference.shape[-1] <= 4:
+                    reference = reference[..., :3].mean(axis=-1)
+                else:
+                    reference = reference[0]
+            reference = reference.astype(np.float32, copy=False)
+
+            image = getattr(cam_widget.view, "image", None)
+            if image is not None:
+                target_shape = image.shape[:2]
+            else:
+                target_shape = (cam_widget.cam.cam.h.value, cam_widget.cam.cam.w.value)
+            if reference.shape[:2] != tuple(target_shape):
+                import cv2
+                reference = cv2.resize(
+                    reference,
+                    (int(target_shape[1]), int(target_shape[0])),
+                    interpolation=cv2.INTER_AREA,
+                )
+            cam_widget.parameters["reference_channel"] = reference
+            cam_widget.reference_toggle.checkbox.setChecked(True)
+
+        def load_reference():
+            filename, _ = QFileDialog.getOpenFileName(
+                self,
+                "Load alignment reference image",
+                "",
+                "Images (*.tif *.tiff *.png *.jpg *.jpeg);;All files (*.*)",
+            )
+            if filename:
+                _load_reference_image(current_widget(), filename)
+                status.setText(os.path.basename(filename))
+                _display("[labcams_ps] Loaded alignment reference: {0}".format(filename))
+
+        def clear_reference():
+            cw = current_widget()
+            if cw.parameters.get("reference_channel") is not None:
+                cw.toggle_reference("")
+            status.setText("No reference loaded")
+            _display("[labcams_ps] Cleared alignment reference")
+
+        load_button.clicked.connect(load_reference)
+        clear_button.clicked.connect(clear_reference)
+
+        dock.setWidget(widget)
+        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        self.ps_alignment_dock = dock
+
+    gui.LabCamsGUI.initUI = init_ui_with_alignment
+    gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
+    gui.LabCamsGUI._ps_alignment_patch = True
+
+
+def apply_patches() -> None:
+    """Patch upstream labcams in memory for this process only."""
+
+    _patch_offline_pco()
+    _patch_alignment_preview()
 
 
 def main() -> None:
