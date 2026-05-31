@@ -69,9 +69,11 @@ Diagnostics and utilities:
 
 - `arduino/treadmill_rh/treadmill_rh.ino` - Teensy treadmill encoder firmware that outputs speed on DAC/A14 for DAQ recording.
 - `arduino/stim_camera_trigger_dual_wavelength/stim_camera_trigger_dual_wavelength.ino` - Teensy camera/dual-wavelength trigger firmware used by labcams excitation triggering.
+- `arduino/constant_camera_dual_wavelength/constant_camera_dual_wavelength.ino` - labcams-compatible imaging Teensy firmware for PCO exposure-gated dual-wavelength LED triggering with this rig's pin map.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
-- `labcams/labcams_widefield_pco_only.json` - latest labcams config found for the PCO-only widefield camera setup.
+- `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
+- `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
 - `requirements.txt` - Python package dependencies.
 - `.gitignore` - excludes HDF5 recordings, Python caches, logs, and local environment folders.
 
@@ -108,6 +110,18 @@ python .\run_daq_recorder.py --config .\usb6366_config.json --hardware
 python .\diagnose_hardware.py --seconds 10
 ```
 
+## labcams PS Wrapper
+
+Use the dedicated conda environment for camera acquisition. The repo includes a small `labcams_ps` launcher that imports upstream `labcams` and adds one rig-specific behavior: if a PCO camera entry has `"allow_missing_camera": true`, the GUI can open with a clear warning when the camera is powered off or disconnected. Recording is disabled for that placeholder camera. Remove or set that flag to `false` for real acquisition if you want missing-camera errors to stop the launch.
+
+PCO-only labcams launch:
+
+```powershell
+cd "C:\Github\Widefield_DAQ_recorder"
+& "C:\ProgramData\anaconda3\envs\labcams\python.exe" -m labcams_ps.gui ".\labcams\labcams_widefield_pco_only.json" -w
+```
+
+The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package.
 ## Timing Notes
 
 The app uses analog input acquisition as the master timing source. Digital input is hardware-timed from the device AI sample clock so analog and digital samples share one sample timeline.

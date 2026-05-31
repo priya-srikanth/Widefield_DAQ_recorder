@@ -13,7 +13,8 @@
       },
       "excitation_trigger": {
         "port": "COM4"
-      }
+      },
+      "allow_missing_camera": true
     }
   ],
   "recorder_path": "C:\\Data\\labcams_data",
