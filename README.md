@@ -114,14 +114,14 @@ python .\diagnose_hardware.py --seconds 10
 
 Use the dedicated conda environment for camera acquisition. The repo includes a small `labcams_ps` launcher that imports upstream `labcams` and adds one rig-specific behavior: if a PCO camera entry has `"allow_missing_camera": true`, the GUI can open with a clear warning when the camera is powered off or disconnected. Recording is disabled for that placeholder camera. Remove or set that flag to `false` for real acquisition if you want missing-camera errors to stop the launch.
 
-PCO-only labcams launch:
+PCO-only labcams launch. Use this wrapper, not the upstream `labcams.exe`, when you want the optional offline-PCO placeholder:
 
 ```powershell
 cd "C:\Github\Widefield_DAQ_recorder"
 & "C:\ProgramData\anaconda3\envs\labcams\python.exe" -m labcams_ps.gui ".\labcams\labcams_widefield_pco_only.json" -w
 ```
 
-The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package.
+The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 ## Timing Notes
 
 The app uses analog input acquisition as the master timing source. Digital input is hardware-timed from the device AI sample clock so analog and digital samples share one sample timeline.
