@@ -4,16 +4,18 @@ Run with the labcams conda environment, for example:
 
     python -m labcams_ps.gui path\to\labcams_widefield_pco_only.json -w
 
-The only current patch is an opt-in PCO offline placeholder.  Add
-``"allow_missing_camera": true`` to a PCO camera entry to let the labcams GUI
-open when the camera is disconnected or powered off.  Without that config flag,
-PCO initialization errors still fail loudly.
+Current patches:
+- opt-in PCO offline placeholder via ``"allow_missing_camera": true``
+- an Alignment Preview dock for reference-image overlays during live preview
+- a Session Save dock for output folder and timestamped prefix selection
 """
 
 from __future__ import annotations
 
-from multiprocessing import Event, Queue, Value
-from multiprocessing import Lock
+from datetime import datetime
+from multiprocessing import Event, Lock, Queue, Value
+import os
+
 import numpy as np
 
 
@@ -114,30 +116,107 @@ def _patch_offline_pco() -> None:
     cams.Camera._ps_offline_pco_patch = True
 
 
-def _patch_alignment_preview() -> None:
-    """Add a ScanImage-like reference overlay dock to the labcams GUI."""
+def _patch_gui_docks() -> None:
+    """Add Priya-rig workflow docks to the labcams GUI."""
 
     import labcams.gui as gui
+    from PyQt5.QtCore import Qt
     from PyQt5.QtWidgets import (
-        QWidget,
-        QVBoxLayout,
-        QHBoxLayout,
-        QPushButton,
-        QLabel,
         QFileDialog,
         QComboBox,
         QDockWidget,
+        QHBoxLayout,
+        QLabel,
+        QLineEdit,
+        QPushButton,
+        QVBoxLayout,
+        QWidget,
     )
-    from PyQt5.QtCore import Qt
 
-    if getattr(gui.LabCamsGUI, "_ps_alignment_patch", False):
+    if getattr(gui.LabCamsGUI, "_ps_gui_docks_patch", False):
         return
 
     original_init_ui = gui.LabCamsGUI.initUI
 
-    def init_ui_with_alignment(self):
+    def init_ui_with_ps_docks(self):
         original_init_ui(self)
+        self._ps_add_session_save_dock()
         self._ps_add_alignment_dock()
+
+    def add_session_save_dock(self):
+        dock = QDockWidget("Session Save", self)
+        dock.setObjectName("ps_session_save")
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        info = QLabel(
+            "Choose the output folder and filename prefix before recording. "
+            "Apply creates prefix_YYYYMMDD_HHMMSS for this session."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        prefix_row = QHBoxLayout()
+        prefix_edit = QLineEdit("session")
+        prefix_row.addWidget(QLabel("Prefix"))
+        prefix_row.addWidget(prefix_edit)
+        layout.addLayout(prefix_row)
+
+        folder_row = QHBoxLayout()
+        folder_edit = QLineEdit(str(self.parameters.get("recorder_path", "")))
+        browse_button = QPushButton("Browse")
+        folder_row.addWidget(QLabel("Folder"))
+        folder_row.addWidget(folder_edit)
+        folder_row.addWidget(browse_button)
+        layout.addLayout(folder_row)
+
+        session_label = QLabel("Session name not applied")
+        session_label.setWordWrap(True)
+        layout.addWidget(session_label)
+
+        apply_button = QPushButton("Apply Save Name")
+        layout.addWidget(apply_button)
+
+        def choose_folder():
+            folder = QFileDialog.getExistingDirectory(
+                self,
+                "Choose labcams output folder",
+                folder_edit.text() or str(self.parameters.get("recorder_path", "")),
+            )
+            if folder:
+                folder_edit.setText(folder)
+
+        def update_writer_folder(cam, folder):
+            cam.recorder_path = folder
+            cam.recorder_parameters["datafolder"] = folder
+            if cam.writer is not None:
+                cam.writer.datafolder = folder
+                cam.writer.path_keys["datafolder"] = folder
+                cam.writer.path_keys["recorder_path"] = folder
+            if hasattr(cam.cam, "recorderpar") and cam.cam.recorderpar is not None:
+                cam.cam.recorderpar["datafolder"] = folder
+
+        def apply_save_name():
+            folder = folder_edit.text().strip()
+            prefix = prefix_edit.text().strip() or "session"
+            safe_prefix = "_".join(prefix.replace("/", "_").replace("\\", "_").split())
+            session_name = "{0}_{1}".format(safe_prefix, datetime.now().strftime("%Y%m%d_%H%M%S"))
+            if folder:
+                os.makedirs(folder, exist_ok=True)
+                self.parameters["recorder_path"] = folder
+                for cam in self.cams:
+                    update_writer_folder(cam, folder)
+            self.set_experiment_name(session_name)
+            session_label.setText("{0} -> {1}".format(folder or "configured folder", session_name))
+            _display("[labcams_ps] Save target set: {0} / {1}".format(folder, session_name))
+
+        browse_button.clicked.connect(choose_folder)
+        apply_button.clicked.connect(apply_save_name)
+
+        dock.setWidget(widget)
+        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        self.ps_session_save_dock = dock
 
     def add_alignment_dock(self):
         if not getattr(self, "camwidgets", None):
@@ -178,7 +257,7 @@ def _patch_alignment_preview() -> None:
             idx = int(camera_select.currentData())
             return self.camwidgets[idx]
 
-        def _load_reference_image(cam_widget, filename):
+        def load_reference_image(cam_widget, filename):
             try:
                 from tifffile import imread
                 reference = imread(filename)
@@ -217,7 +296,7 @@ def _patch_alignment_preview() -> None:
                 "Images (*.tif *.tiff *.png *.jpg *.jpeg);;All files (*.*)",
             )
             if filename:
-                _load_reference_image(current_widget(), filename)
+                load_reference_image(current_widget(), filename)
                 status.setText(os.path.basename(filename))
                 _display("[labcams_ps] Loaded alignment reference: {0}".format(filename))
 
@@ -236,16 +315,17 @@ def _patch_alignment_preview() -> None:
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_alignment_dock = dock
 
-    gui.LabCamsGUI.initUI = init_ui_with_alignment
+    gui.LabCamsGUI.initUI = init_ui_with_ps_docks
+    gui.LabCamsGUI._ps_add_session_save_dock = add_session_save_dock
     gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
-    gui.LabCamsGUI._ps_alignment_patch = True
+    gui.LabCamsGUI._ps_gui_docks_patch = True
 
 
 def apply_patches() -> None:
     """Patch upstream labcams in memory for this process only."""
 
     _patch_offline_pco()
-    _patch_alignment_preview()
+    _patch_gui_docks()
 
 
 def main() -> None:

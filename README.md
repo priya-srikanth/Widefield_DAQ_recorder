@@ -123,7 +123,9 @@ cd "C:\Github\Widefield_DAQ_recorder"
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
-The `labcams_ps` GUI also adds an `Alignment Preview` dock. Use `Load Reference` to choose a prior alignment snapshot; it displays the saved reference in red over the live preview in green so the animal/window can be physically aligned before recording. `Clear` removes the overlay. This mode changes display only and does not alter recorded frames.
+The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder.
+
+The `Alignment Preview` dock lets you choose a prior alignment snapshot; it displays the saved reference in red over the live preview in green so the animal/window can be physically aligned before recording. `Clear` removes the overlay. This mode changes display only and does not alter recorded frames.
 ## Timing Notes
 
 The app uses analog input acquisition as the master timing source. Digital input is hardware-timed from the device AI sample clock so analog and digital samples share one sample timeline.
