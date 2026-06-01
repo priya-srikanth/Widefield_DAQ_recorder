@@ -115,6 +115,44 @@ def _patch_offline_pco() -> None:
     cams.Camera._init_pco_cam = _init_pco_cam_with_offline_fallback
     cams.Camera._ps_offline_pco_patch = True
 
+_ORIGINAL_PCO_CAM_INIT = None
+
+
+def _patch_pco_hwio4_status_expos() -> None:
+    """Prefer the pco.python helper for enabling PCO line 4 exposure output."""
+
+    global _ORIGINAL_PCO_CAM_INIT
+    try:
+        import labcams.pco as lab_pco
+    except Exception:
+        return
+
+    if getattr(lab_pco.PCOCam, "_ps_hwio4_patch", False):
+        return
+
+    _ORIGINAL_PCO_CAM_INIT = lab_pco.PCOCam._cam_init
+
+    def _cam_init_with_status_expos(self):
+        _ORIGINAL_PCO_CAM_INIT(self)
+        configure = getattr(self.cam, "configureHWIO_4_statusExpos", None)
+        if configure is None:
+            return
+        try:
+            ok = configure(True, "high level", "status expos", "all lines")
+        except Exception as err:
+            _display(
+                "[labcams_ps] Could not set PCO HWIO4 Status Expos with all-lines timing; "
+                "trying default timing. Original error: {0}".format(err)
+            )
+            try:
+                ok = configure(True, "high level", "status expos", None)
+            except Exception as err2:
+                _display("[labcams_ps] WARNING: Could not configure PCO HWIO4 Status Expos: {0}".format(err2))
+                return
+        _display("[labcams_ps] PCO HWIO4 configured for Status Expos output: {0}".format(ok))
+
+    lab_pco.PCOCam._cam_init = _cam_init_with_status_expos
+    lab_pco.PCOCam._ps_hwio4_patch = True
 
 def _patch_gui_docks() -> None:
     """Add Priya-rig workflow docks to the labcams GUI."""
@@ -396,6 +434,7 @@ def apply_patches() -> None:
     """Patch upstream labcams in memory for this process only."""
 
     _patch_offline_pco()
+    _patch_pco_hwio4_status_expos()
     _patch_gui_docks()
 
 
