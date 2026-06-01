@@ -5,5 +5,15 @@ venv/
 *.h5
 *.hdf5
 *.log
+*.npy
+*.npz
+*.dat
+*.bin
+*.tif
+*.tiff
+*.png
+wfield_local_test/
+wfield_local_results/
+**/wfield_local_results/
 .idea/
 .vscode/
