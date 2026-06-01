@@ -240,14 +240,42 @@ def _patch_gui_docks() -> None:
         def update_writer_folder(cam, folder):
             cam.recorder_path = folder
             cam.recorder_parameters["datafolder"] = folder
-            if cam.writer is not None:
+            cam.recorder_parameters["recorder_path"] = folder
+            if hasattr(cam.cam, "recorderpar") and cam.cam.recorderpar is not None:
+                cam.cam.recorderpar["datafolder"] = folder
+                cam.cam.recorderpar["recorder_path"] = folder
+            if cam.writer is None:
+                return
+
+            was_alive = cam.writer.is_alive()
+            writer_class = type(cam.writer)
+            virtual_channels = getattr(cam.writer, "virtual_channels", None)
+            try:
+                cam.writer.stop()
+                if was_alive:
+                    cam.writer.join(timeout=2.0)
+            except Exception as err:
+                _display("[labcams_ps] WARNING: Could not stop old writer cleanly: {0}".format(err))
+
+            try:
+                cam.writer = writer_class(
+                    cam=cam.cam,
+                    virtual_channels=virtual_channels,
+                    **cam.recorder_parameters,
+                )
                 cam.writer.datafolder = folder
                 cam.writer.path_keys["datafolder"] = folder
                 cam.writer.path_keys["recorder_path"] = folder
-            if hasattr(cam.cam, "recorderpar") and cam.cam.recorderpar is not None:
-                cam.cam.recorderpar["datafolder"] = folder
+                cam.writer.start()
+            except Exception as err:
+                _display("[labcams_ps] ERROR: Could not restart writer with new folder: {0}".format(err))
+                raise
 
         def apply_save_name():
+            if self.recController.saveOnStartToggle.isChecked():
+                session_label.setText("Stop recording before changing save target")
+                _display("[labcams_ps] Save target not changed because recording is active")
+                return
             folder = folder_edit.text().strip()
             prefix = prefix_edit.text().strip() or "session"
             safe_prefix = "_".join(prefix.replace("/", "_").replace("\\", "_").split())
