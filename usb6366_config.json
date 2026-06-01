@@ -1,116 +1,116 @@
-﻿{
-    "app_title":  "Widefield DAQ Recorder",
-    "device":  "Dev2",
-    "sample_rate_hz":  5000.0,
-    "block_size":  1000,
-    "display_seconds":  60.0,
-    "output_directory":  "E:/DAQ_recorder_output",
-    "file_prefix":  "PS92_baseline",
-    "simulate":  false,
-    "analog_channels":  [
-                            {
-                                "name":  "lick_analog",
-                                "physical_channel":  "ai0",
-                                "enabled":  true,
-                                "min_val":  -1.0,
-                                "max_val":  8.0,
-                                "scale":  1.0,
-                                "terminal_config":  "DIFF"
-                            },
-                            {
-                                "name":  "led405_ttl",
-                                "physical_channel":  "ai1",
-                                "enabled":  true,
-                                "min_val":  -2.0,
-                                "max_val":  8.0,
-                                "scale":  1.0,
-                                "terminal_config":  "DIFF"
-                            },
-                            {
-                                "name":  "led470_ttl",
-                                "physical_channel":  "ai2",
-                                "enabled":  true,
-                                "min_val":  -5.0,
-                                "max_val":  5.0,
-                                "scale":  1.0,
-                                "terminal_config":  "DIFF"
-                            },
-                            {
-                                "name":  "treadmill",
-                                "physical_channel":  "ai3",
-                                "enabled":  true,
-                                "min_val":  0.0,
-                                "max_val":  3.0,
-                                "scale":  1.0,
-                                "terminal_config":  "DIFF"
-                            },
-                            {
-                                "name":  "reward_ttl",
-                                "physical_channel":  "ai4",
-                                "enabled":  true,
-                                "min_val":  -5.0,
-                                "max_val":  5.0,
-                                "scale":  1.0,
-                                "terminal_config":  "DIFF"
-                            }
-                        ],
-    "digital_channels":  [
-                             {
-                                 "name":  "sync",
-                                 "physical_channel":  "port0/line0",
-                                 "enabled":  true
-                             },
-                             {
-                                 "name":  "cue",
-                                 "physical_channel":  "port0/line1",
-                                 "enabled":  true
-                             },
-                             {
-                                 "name":  "trial_start",
-                                 "physical_channel":  "port0/line2",
-                                 "enabled":  true
-                             },
-                             {
-                                 "name":  "spout_strobe",
-                                 "physical_channel":  "port0/line3",
-                                 "enabled":  true
-                             },
-                             {
-                                 "name":  "spout_bit0",
-                                 "physical_channel":  "port0/line4",
-                                 "enabled":  true
-                             },
-                             {
-                                 "name":  "spout_bit1",
-                                 "physical_channel":  "port0/line5",
-                                 "enabled":  true
-                             },
-                             {
-                                 "name":  "spout_bit2",
-                                 "physical_channel":  "port0/line6",
-                                 "enabled":  true
-                             },
-                             {
-                                 "name":  "pco_exposure",
-                                 "physical_channel":  "port0/line7",
-                                 "enabled":  true
-                             }
-                         ],
-    "display_order":  [
-                          "ai:ai3",
-                          "di:port0/line2",
-                          "di:port0/line3",
-                          "di:port0/line1",
-                          "ai:ai4",
-                          "ai:ai0",
-                          "di:port0/line7",
-                          "di:port0/line0",
-                          "di:port0/line4",
-                          "di:port0/line5",
-                          "di:port0/line6",
-                          "ai:ai1",
-                          "ai:ai2"
-                      ],
-    "analog_storage":  "int16_scaled",
-    "max_duration_s":  0
+{
+  "app_title": "Widefield DAQ Recorder",
+  "device": "Dev2",
+  "sample_rate_hz": 5000.0,
+  "block_size": 1000,
+  "display_seconds": 60.0,
+  "max_duration_s": 0.0,
+  "output_directory": "E:/DAQ_recorder_output",
+  "file_prefix": "test_labcams",
+  "analog_storage": "int16_scaled",
+  "simulate": false,
+  "analog_channels": [
+    {
+      "name": "lick_analog",
+      "physical_channel": "ai0",
+      "enabled": true,
+      "min_val": -1.0,
+      "max_val": 6.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "led415_ttl",
+      "physical_channel": "ai1",
+      "enabled": true,
+      "min_val": -1.0,
+      "max_val": 6.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "led470_ttl",
+      "physical_channel": "ai2",
+      "enabled": true,
+      "min_val": -1.0,
+      "max_val": 6.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "treadmill",
+      "physical_channel": "ai3",
+      "enabled": true,
+      "min_val": 0.0,
+      "max_val": 3.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "reward_ttl",
+      "physical_channel": "ai4",
+      "enabled": true,
+      "min_val": -1.0,
+      "max_val": 6.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    }
+  ],
+  "digital_channels": [
+    {
+      "name": "sync",
+      "physical_channel": "port0/line0",
+      "enabled": true
+    },
+    {
+      "name": "cue",
+      "physical_channel": "port0/line1",
+      "enabled": true
+    },
+    {
+      "name": "trial_start",
+      "physical_channel": "port0/line2",
+      "enabled": true
+    },
+    {
+      "name": "spout_strobe",
+      "physical_channel": "port0/line3",
+      "enabled": true
+    },
+    {
+      "name": "spout_bit0",
+      "physical_channel": "port0/line4",
+      "enabled": true
+    },
+    {
+      "name": "spout_bit1",
+      "physical_channel": "port0/line5",
+      "enabled": true
+    },
+    {
+      "name": "spout_bit2",
+      "physical_channel": "port0/line6",
+      "enabled": true
+    },
+    {
+      "name": "pco_exposure",
+      "physical_channel": "port0/line7",
+      "enabled": true
+    }
+  ],
+  "display_order": [
+    "ai:ai3",
+    "di:port0/line2",
+    "di:port0/line3",
+    "di:port0/line1",
+    "ai:ai4",
+    "ai:ai0",
+    "di:port0/line7",
+    "di:port0/line0",
+    "di:port0/line4",
+    "di:port0/line5",
+    "di:port0/line6",
+    "ai:ai1",
+    "ai:ai2"
+  ]
 }
