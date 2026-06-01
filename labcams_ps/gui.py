@@ -141,6 +141,7 @@ def _patch_gui_docks() -> None:
     def init_ui_with_ps_docks(self):
         original_init_ui(self)
         self._ps_add_session_save_dock()
+        self._ps_add_led_control_dock()
         self._ps_add_alignment_dock()
 
     def add_session_save_dock(self):
@@ -217,6 +218,75 @@ def _patch_gui_docks() -> None:
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_session_save_dock = dock
+    def add_led_control_dock(self):
+        trigger = getattr(self, "excitation_trigger", None)
+        if trigger is None:
+            return
+
+        dock = QDockWidget("LED Control", self)
+        dock.setObjectName("ps_led_control")
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        info = QLabel("Select which LED channel is gated by camera exposure pulses.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        mode_row = QHBoxLayout()
+        mode_combo = QComboBox()
+        mode_names = list(getattr(trigger, "modes", []))
+        labels = {
+            "470nm": "Blue / 470 nm",
+            "405nm": "Violet / 405 nm",
+            "both": "Alternating 470/405",
+        }
+        for mode in mode_names:
+            mode_combo.addItem(labels.get(mode, mode), mode)
+        if mode_names:
+            mode_combo.setCurrentIndex(len(mode_names) - 1)
+        mode_row.addWidget(QLabel("Mode"))
+        mode_row.addWidget(mode_combo)
+        layout.addLayout(mode_row)
+
+        button_row = QHBoxLayout()
+        arm_button = QPushButton("Arm LEDs")
+        disarm_button = QPushButton("Disarm LEDs")
+        button_row.addWidget(arm_button)
+        button_row.addWidget(disarm_button)
+        layout.addLayout(button_row)
+
+        status = QLabel("Ready")
+        status.setWordWrap(True)
+        layout.addWidget(status)
+
+        def apply_mode(index):
+            if index < 0:
+                return
+            trigger.set_mode(index + 1)
+            trigger.check_nchannels()
+            status.setText("Mode: {0}".format(mode_combo.currentText()))
+            _display("[labcams_ps] LED mode set to {0}".format(mode_combo.currentText()))
+
+        def arm_leds():
+            trigger.arm()
+            status.setText("Armed: {0}".format(mode_combo.currentText()))
+            _display("[labcams_ps] LED trigger armed")
+
+        def disarm_leds():
+            trigger.disarm()
+            status.setText("Disarmed")
+            _display("[labcams_ps] LED trigger disarmed")
+
+        mode_combo.currentIndexChanged.connect(apply_mode)
+        arm_button.clicked.connect(arm_leds)
+        disarm_button.clicked.connect(disarm_leds)
+        if mode_names:
+            apply_mode(mode_combo.currentIndex())
+
+        dock.setWidget(widget)
+        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        self.ps_led_control_dock = dock
 
     def add_alignment_dock(self):
         if not getattr(self, "camwidgets", None):
@@ -317,6 +387,7 @@ def _patch_gui_docks() -> None:
 
     gui.LabCamsGUI.initUI = init_ui_with_ps_docks
     gui.LabCamsGUI._ps_add_session_save_dock = add_session_save_dock
+    gui.LabCamsGUI._ps_add_led_control_dock = add_led_control_dock
     gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
     gui.LabCamsGUI._ps_gui_docks_patch = True
 
