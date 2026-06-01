@@ -77,11 +77,16 @@ def main() -> None:
 
     import wfield.ncaas_gui as ncaas_gui
 
+    ncaas_gui.QProgressBar.setValue = _set_value_int
+
     # ncaas_gui imports s3_connect into its module namespace via import *.
     # Patch that copy too so all GUI paths use the session-token-aware helper.
     import wfield.ncaas_utils as ncaas_utils
 
     ncaas_gui.s3_connect = ncaas_utils.s3_connect
+
+    print("Using Widefield_DAQ_recorder wfield NeuroCAAS compatibility launcher.")
+    print("Patch active: QProgressBar values are coerced to int; AWS session token is supported.")
 
     folder = sys.argv[1] if len(sys.argv) > 1 else "."
     ncaas_gui.main(folder=folder)
