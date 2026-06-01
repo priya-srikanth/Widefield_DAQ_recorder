@@ -158,7 +158,7 @@ def _patch_gui_docks() -> None:
     """Add Priya-rig workflow docks to the labcams GUI."""
 
     import labcams.gui as gui
-    from PyQt5.QtCore import Qt
+    from PyQt5.QtCore import QTimer, Qt
     from PyQt5.QtWidgets import (
         QFileDialog,
         QComboBox,
@@ -176,15 +176,23 @@ def _patch_gui_docks() -> None:
 
     original_init_ui = gui.LabCamsGUI.initUI
 
+    def hide_upstream_led_dock(self):
+        upstream_led_dock = getattr(self, "camstim_tab", None)
+        if upstream_led_dock is None:
+            return
+        self.removeDockWidget(upstream_led_dock)
+        upstream_led_dock.hide()
+        upstream_led_dock.setParent(None)
+
     def init_ui_with_ps_docks(self):
         original_init_ui(self)
-        upstream_led_dock = getattr(self, "camstim_tab", None)
-        if upstream_led_dock is not None:
-            upstream_led_dock.hide()
+        self._ps_hide_upstream_led_dock()
         self._ps_add_session_save_dock()
         self._ps_add_preview_dock()
         self._ps_add_led_control_dock()
         self._ps_add_alignment_dock()
+        QTimer.singleShot(0, self._ps_hide_upstream_led_dock)
+        QTimer.singleShot(500, self._ps_hide_upstream_led_dock)
 
     def add_session_save_dock(self):
         dock = QDockWidget("Session Save", self)
@@ -466,6 +474,7 @@ def _patch_gui_docks() -> None:
         self.ps_alignment_dock = dock
 
     gui.LabCamsGUI.initUI = init_ui_with_ps_docks
+    gui.LabCamsGUI._ps_hide_upstream_led_dock = hide_upstream_led_dock
     gui.LabCamsGUI._ps_add_session_save_dock = add_session_save_dock
     gui.LabCamsGUI._ps_add_preview_dock = add_preview_dock
     gui.LabCamsGUI._ps_add_led_control_dock = add_led_control_dock
