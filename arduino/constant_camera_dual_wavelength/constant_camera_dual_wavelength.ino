@@ -3,15 +3,15 @@
 // This is a labcams-compatible variant of the upstream
 // stim_camera_trigger_dual_wavelength sketch.  It keeps the serial protocol
 // and capability string shape expected by labcams CamStimInterface:
-//   @Q -> @Q_NCHANNELS_2_MODES_470nm:405nm:both
+//   @Q -> @Q_NCHANNELS_2_MODES_415nm:470nm:both
 //   @C -> @C_1 or @C_2
 //   @M_<mode>, @N, @S
 
 const byte PIN_CAM_EXPOSURE = 3;   // PCO exposure TTL into Teensy interrupt pin
 const byte PIN_SYNC0        = 4;   // optional behavior/global sync into Teensy
 const byte PIN_SYNC1        = 2;   // unused by labcams, kept available for spare sync
-const byte PIN_LED0_TRIGGER = 5;   // LED0 TTL out, advertised as 470nm by labcams
-const byte PIN_LED1_TRIGGER = 6;   // LED1 TTL out, advertised as 405nm by labcams
+const byte PIN_LED0_TRIGGER = 5;   // LED0 TTL out, advertised as 415nm/violet by labcams
+const byte PIN_LED1_TRIGGER = 6;   // LED1 TTL out, advertised as 470nm/blue by labcams
 const byte PIN_GPIO         = 7;   // optional exposure mirror for DAQ/camera timing
 
 #define GPIO_MIMIC_EXPOSURE
@@ -20,7 +20,7 @@ const byte PIN_GPIO         = 7;   // optional exposure mirror for DAQ/camera ti
 #define STX '@'
 #define ETX '\n'
 #define SEP "_"
-#define CAP "NCHANNELS_2_MODES_470nm:405nm:both"
+#define CAP "NCHANNELS_2_MODES_415nm:470nm:both"
 
 #define QUERY_NCHANNELS 'C'
 #define QUERY_CAP       'Q'
@@ -28,7 +28,7 @@ const byte PIN_GPIO         = 7;   // optional exposure mirror for DAQ/camera ti
 #define STOP_LEDS       'S'   // DISARM
 #define FRAME           'F'   // Teensy -> PC (frame event)
 #define SYNC            'T'   // Teensy -> PC (sync event)
-#define SET_MODE        'M'   // PC -> Teensy (1=LED0, 2=LED1, 3=alternate/both)
+#define SET_MODE        'M'   // PC -> Teensy (1=415/violet, 2=470/blue, 3=alternate/both)
 
 // ---------- State ----------
 volatile uint32_t current_time = 0;
@@ -43,7 +43,7 @@ volatile int32_t  last_sync_ms     = -1;
 volatile uint32_t sync_count       = 0;
 volatile uint32_t sync_frame_count = 0;
 
-volatile uint8_t mode  = 3;     // 1: LED0, 2: LED1, 3: alternate
+volatile uint8_t mode  = 3;     // 1: 415/violet, 2: 470/blue, 3: alternate
 volatile uint8_t armed = 0;
 
 // ---------- Serial RX buffer ----------

@@ -179,6 +179,7 @@ def _patch_gui_docks() -> None:
     def init_ui_with_ps_docks(self):
         original_init_ui(self)
         self._ps_add_session_save_dock()
+        self._ps_add_preview_dock()
         self._ps_add_led_control_dock()
         self._ps_add_alignment_dock()
 
@@ -256,6 +257,51 @@ def _patch_gui_docks() -> None:
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_session_save_dock = dock
+    def add_preview_dock(self):
+        dock = QDockWidget("Preview", self)
+        dock.setObjectName("ps_preview")
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        info = QLabel("Start live camera preview without saving frames to disk.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        button_row = QHBoxLayout()
+        start_button = QPushButton("Start Preview")
+        stop_button = QPushButton("Stop Preview")
+        snapshot_button = QPushButton("Snapshot")
+        button_row.addWidget(start_button)
+        button_row.addWidget(stop_button)
+        button_row.addWidget(snapshot_button)
+        layout.addLayout(button_row)
+
+        status = QLabel("Preview stopped")
+        status.setWordWrap(True)
+        layout.addWidget(status)
+
+        def start_preview():
+            self.recController.saveOnStartToggle.setChecked(False)
+            self.recController.softTriggerToggle.setChecked(True)
+            status.setText("Preview running; not saving")
+            _display("[labcams_ps] Preview started without saving")
+
+        def stop_preview():
+            self.recController.softTriggerToggle.setChecked(False)
+            status.setText("Preview stopped")
+            _display("[labcams_ps] Preview stopped")
+
+        def take_snapshot():
+            self.recController.snapshotButton.click()
+
+        start_button.clicked.connect(start_preview)
+        stop_button.clicked.connect(stop_preview)
+        snapshot_button.clicked.connect(take_snapshot)
+
+        dock.setWidget(widget)
+        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        self.ps_preview_dock = dock
     def add_led_control_dock(self):
         trigger = getattr(self, "excitation_trigger", None)
         if trigger is None:
@@ -274,9 +320,9 @@ def _patch_gui_docks() -> None:
         mode_combo = QComboBox()
         mode_names = list(getattr(trigger, "modes", []))
         labels = {
+            "415nm": "Violet / 415 nm",
             "470nm": "Blue / 470 nm",
-            "405nm": "Violet / 405 nm",
-            "both": "Alternating 470/405",
+            "both": "Alternating 415/470",
         }
         for mode in mode_names:
             mode_combo.addItem(labels.get(mode, mode), mode)
@@ -425,6 +471,7 @@ def _patch_gui_docks() -> None:
 
     gui.LabCamsGUI.initUI = init_ui_with_ps_docks
     gui.LabCamsGUI._ps_add_session_save_dock = add_session_save_dock
+    gui.LabCamsGUI._ps_add_preview_dock = add_preview_dock
     gui.LabCamsGUI._ps_add_led_control_dock = add_led_control_dock
     gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
     gui.LabCamsGUI._ps_gui_docks_patch = True
