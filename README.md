@@ -74,6 +74,7 @@ Diagnostics and utilities:
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
 - `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
+- `wfield_ncaas_fixed.py` - launcher for `wfield ncaas` that patches a PyQt progress-bar type issue seen during NeuroCAAS uploads.
 - `requirements.txt` - Python package dependencies.
 - `.gitignore` - excludes HDF5 recordings, Python caches, logs, and local environment folders.
 
@@ -126,6 +127,25 @@ The upstream `labcams` package remains installed in the conda `labcams` environm
 The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder.
 
 The `Alignment Preview` dock lets you choose a prior alignment snapshot; it displays the saved reference in red over the live preview in green so the animal/window can be physically aligned before recording. `Clear` removes the overlay. This mode changes display only and does not alter recorded frames.
+
+## wfield NeuroCAAS Launcher
+
+If `wfield ncaas` crashes during upload with `QProgressBar.setValue` receiving a `numpy.float64`, launch NeuroCAAS through the repo compatibility wrapper:
+
+```powershell
+conda activate wfield
+cd "C:\Github\Widefield_DAQ_recorder"
+python .\wfield_ncaas_fixed.py
+```
+
+To start in a specific recording folder:
+
+```powershell
+python .\wfield_ncaas_fixed.py "E:\labcams_data\20260601\PS94_20260601_141614"
+```
+
+The wrapper does not modify the installed `wfield` package. It only coerces PyQt progress-bar values to plain Python integers in that launched process.
+
 ## Timing Notes
 
 The app uses analog input acquisition as the master timing source. Digital input is hardware-timed from the device AI sample clock so analog and digital samples share one sample timeline.
