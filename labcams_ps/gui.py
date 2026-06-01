@@ -430,6 +430,10 @@ def _patch_gui_docks() -> None:
                 else:
                     reference = reference[0]
             reference = reference.astype(np.float32, copy=False)
+            reference -= np.nanmin(reference)
+            max_ref = np.nanmax(reference)
+            if max_ref > 0:
+                reference /= max_ref
 
             image = getattr(cam_widget.view, "image", None)
             if image is not None:
@@ -444,7 +448,14 @@ def _patch_gui_docks() -> None:
                     interpolation=cv2.INTER_AREA,
                 )
             cam_widget.parameters["reference_channel"] = reference
+            cam_widget.reference_toggle.value = True
             cam_widget.reference_toggle.checkbox.setChecked(True)
+            live_image = getattr(cam_widget.view, "image", None)
+            if live_image is not None:
+                try:
+                    cam_widget.image(np.asarray(live_image), cam_widget.lastnFrame + 1)
+                except Exception as err:
+                    _display("[labcams_ps] Loaded reference, but immediate overlay refresh failed: {0}".format(err))
 
         def load_reference():
             filename, _ = QFileDialog.getOpenFileName(
