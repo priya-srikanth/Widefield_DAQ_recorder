@@ -178,6 +178,9 @@ def _patch_gui_docks() -> None:
 
     def init_ui_with_ps_docks(self):
         original_init_ui(self)
+        upstream_led_dock = getattr(self, "camstim_tab", None)
+        if upstream_led_dock is not None:
+            upstream_led_dock.hide()
         self._ps_add_session_save_dock()
         self._ps_add_preview_dock()
         self._ps_add_led_control_dock()
@@ -318,16 +321,10 @@ def _patch_gui_docks() -> None:
 
         mode_row = QHBoxLayout()
         mode_combo = QComboBox()
-        mode_names = list(getattr(trigger, "modes", []))
-        labels = {
-            "415nm": "Violet / 415 nm",
-            "470nm": "Blue / 470 nm",
-            "both": "Alternating 415/470",
-        }
-        for mode in mode_names:
-            mode_combo.addItem(labels.get(mode, mode), mode)
-        if mode_names:
-            mode_combo.setCurrentIndex(len(mode_names) - 1)
+        mode_combo.addItem("Violet / 415 nm", 1)
+        mode_combo.addItem("Blue / 470 nm", 2)
+        mode_combo.addItem("Alternating 415/470", 3)
+        mode_combo.setCurrentIndex(2)
         mode_row.addWidget(QLabel("Mode"))
         mode_row.addWidget(mode_combo)
         layout.addLayout(mode_row)
@@ -346,7 +343,7 @@ def _patch_gui_docks() -> None:
         def apply_mode(index):
             if index < 0:
                 return
-            trigger.set_mode(index + 1)
+            trigger.set_mode(int(mode_combo.currentData()))
             trigger.check_nchannels()
             status.setText("Mode: {0}".format(mode_combo.currentText()))
             _display("[labcams_ps] LED mode set to {0}".format(mode_combo.currentText()))
@@ -364,8 +361,7 @@ def _patch_gui_docks() -> None:
         mode_combo.currentIndexChanged.connect(apply_mode)
         arm_button.clicked.connect(arm_leds)
         disarm_button.clicked.connect(disarm_leds)
-        if mode_names:
-            apply_mode(mode_combo.currentIndex())
+        apply_mode(mode_combo.currentIndex())
 
         dock.setWidget(widget)
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
