@@ -70,11 +70,13 @@ Diagnostics and utilities:
 - `arduino/treadmill_rh/treadmill_rh.ino` - Teensy treadmill encoder firmware that outputs speed on DAC/A14 for DAQ recording.
 - `arduino/stim_camera_trigger_dual_wavelength/stim_camera_trigger_dual_wavelength.ino` - Teensy camera/dual-wavelength trigger firmware used by labcams excitation triggering.
 - `arduino/constant_camera_dual_wavelength/constant_camera_dual_wavelength.ino` - labcams-compatible imaging Teensy firmware for PCO exposure-gated dual-wavelength LED triggering with this rig's pin map.
-- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - labcams-compatible Teensy firmware that waits for behavior `trial_start` on pin 20, emits PCO frame-start trigger pulses on pin 18 during the trial, gates 415/470 LEDs from PCO Status Expos on pin 3, and stops on behavior `trial_stop` on pin 19.
+- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - DEPRECATED open-loop trial-gated firmware. The Teensy emits PCO frame-start trigger pulses on pin 18, but when the PCO drops a trigger (e.g. trigger period == exposure time, no readout headroom) the surviving exposures lock to one LED and the live image dims. Superseded by `trial_gated_acquire_enable`.
+- `arduino/trial_gated_acquire_enable/trial_gated_acquire_enable.ino` - current trial-gated firmware. Drives PCO Acquire Enable as a level signal on pin 18 (HIGH from behavior `trial_start` on pin 20 to `trial_stop` on pin 19); the free-running camera produces frames only while Acquire Enable is HIGH. LEDs are gated closed-loop from PCO Status Expos on pin 3 (same as `constant_camera_dual_wavelength`), so the camera and LEDs cannot desynchronize. `pulse_count` resets on `trial_start` so each trial's first LED is deterministic.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
-- `labcams/labcams_widefield_pco_trial_gated.json` - PCO labcams config for trial-gated acquisition using the Teensy as the external PCO frame trigger source.
+- `labcams/labcams_widefield_pco_trial_gated.json` - DEPRECATED config for the open-loop trial-gated method (external PCO frame trigger from the Teensy). Kept for reference; use the acquire-enable config below.
+- `labcams/labcams_widefield_pco_trial_gated_acquire_enable.json` - current trial-gated config. Sets `trigger_mode: "auto sequence"` and `acquire_mode: "external"` so the camera free-runs and is gated by the Teensy Acquire Enable line.
 - `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
 - `wfield_local/` - local widefield processing helpers for motion correction, SVD/hemodynamic correction, Allen alignment, cue/lick-aligned plots, alignment diagnostics, and NeuroCAAS compatibility launch.
 - `requirements.txt` - Python package dependencies.
@@ -153,11 +155,51 @@ If the labcams console shows `[CamStimTrigger] Unknown message: E1` after launch
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
-The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder.
+The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder. The labcams configs default `recorder_path` to `E:\labcams_data`; the Session Save dock overrides it per session.
 
 The `Alignment Preview` dock lets you choose a prior alignment snapshot; it displays the saved reference in red over the live preview in green so the animal/window can be physically aligned before recording. `Clear` removes the overlay. This mode changes display only and does not alter recorded frames.
 
 The `Camera Crop / ROI` dock lets you draw or enter a PCO ROI rectangle. `Accept ROI` writes that ROI into the active labcams JSON config, and `Clear ROI` removes it. Restart labcams before recording after changing ROI so the PCO camera initializes with the requested hardware crop.
+
+## Trial-gated acquisition via PCO Acquire Enable (current method)
+
+This is the recommended way to record widefield only during behavior trials. It replaces the older open-loop frame-trigger method (`trial_gated_camera_dual_wavelength`), which dimmed the live image at random times: the Teensy drove PCO frame-start triggers at a period equal to the exposure time, so whenever sensor readout had not finished the PCO dropped that trigger; the surviving exposures then all landed on the same (isosbestic, dim) LED for the rest of the trial.
+
+In the acquire-enable method the camera free-runs internally (`trigger_mode: "auto sequence"`) and the Teensy gates acquisition with the PCO Acquire Enable input (`acquire_mode: "external"`). The Teensy holds Acquire Enable HIGH for the duration of each trial, so the camera produces zero frames between trials and a clean continuous-looking stream during each trial. LEDs are gated closed-loop from PCO Status Expos, exactly as in continuous acquisition, so the camera and LEDs cannot desynchronize. Per-channel rate is the full 31.25 Hz (62.5 fps total).
+
+Launch:
+
+```powershell
+cd "C:\Github\Widefield_DAQ_recorder"
+& "C:\ProgramData\anaconda3\envs\labcams\python.exe" -m labcams_ps.gui ".\labcams\labcams_widefield_pco_trial_gated_acquire_enable.json" -w
+```
+
+Flash `arduino/trial_gated_acquire_enable/trial_gated_acquire_enable.ino` to the labcams Teensy and wire:
+
+- behavior Arduino `trial_start` TTL -> Teensy pin 20
+- behavior Arduino `trial_stop` TTL -> Teensy pin 19
+- Teensy pin 18 -> **PCO SMA input #2, Acquire Enable** (level signal, HIGH during trial). Leave SMA input #1 unconnected. This is the one wiring change from the open-loop method, which used SMA input #1.
+- PCO SMA output #4, Status Expos -> Teensy pin 3
+- Teensy pin 5 -> 415 nm/violet LED TTL input
+- Teensy pin 6 -> 470 nm/blue LED TTL input
+- optional Teensy pin 7 -> DAQ for a direct copy of Status Expos (`pco_exposure`)
+
+CamWare notes: `pco.Camera()` calls `reset_settings_to_default()` on every connect, so trigger/acquire mode set in CamWare do not survive a labcams launch -- only the config + wrapper set them at runtime. What still matters in CamWare is the hardware I/O: the Acquire Enable input enabled with `High` polarity, and SMA output #4 as `Status Exposure`, `Show common time of 'All lines'`, `On`, `High`.
+
+### Why the wrapper applies patches at import time
+
+labcams forces multiprocessing start method `spawn` (see `labcams/cams.py`), so the PCO camera runs in a spawned child interpreter that re-imports `labcams.pco` fresh and never calls `main()`/`apply_patches()`. Monkey-patches applied only in `main()` are therefore absent in that child, which then runs the unpatched upstream `PCOCam._cam_init` -- whose only acquire-mode line is the upstream typo `self.cam.set_acquire_mode = self.acquire_mode` (an attribute assignment, not an SDK call). Combined with the reset-to-default on connect, the camera silently stayed in `acquire_mode="auto"` and free-ran continuously, ignoring Acquire Enable.
+
+The fix (`labcams_ps/gui.py`) moves the camera-process patches into `apply_camera_process_patches()` and calls it at module import time, not just inside `main()`. The spawn child re-imports this module to unpickle the camera Process, so the call runs there too and the child's `_cam_init` actually issues `set_acquire_mode("external")` / `set_trigger_mode("auto sequence")`. The patches are idempotent, so re-application from `main()` in the parent is a no-op.
+
+### Verifying gating worked
+
+After a short test recording, compare the DAQ `pco_exposure` digital line (line 7) against `trial_start`/`trial_end` and check the labcams `.camlog`:
+
+- the camlog inter-frame intervals should show multi-second gaps at trial boundaries (not a single uninterrupted 16 ms train), and
+- essentially no `pco_exposure` pulses should fall outside trial windows.
+
+On a successful 7-trial test (2026-06-02), the camlog showed 6 inter-trial pauses of ~2.4-2.6 s, in-trial rate was 62.5 fps, and LED alternation was clean (0 frames with both LEDs on). Before the fix the same setup produced a gapless exposure train with 47% of frames falling between trials.
 
 ## wfield NeuroCAAS Launcher
 
