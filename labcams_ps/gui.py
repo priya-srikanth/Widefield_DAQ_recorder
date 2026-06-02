@@ -240,7 +240,7 @@ def _patch_camstim_trial_messages() -> None:
                     code = int(parts[1])
                     frame = int(parts[2])
                     t_ms = float(parts[3])
-                    name = "start" if code == 1 else "stop" if code == 2 else "unknown"
+                    name = "start" if code == 1 else "stop" if code == 2 else "timeout" if code == 3 else "unknown"
                     _display(
                         "[labcams_ps] Teensy trial {0} acknowledged at frame {1}, t={2} ms".format(
                             name, frame, t_ms
@@ -252,6 +252,11 @@ def _patch_camstim_trial_messages() -> None:
                 if len(parts) >= 2:
                     state = "on" if int(parts[1]) else "off"
                     _display("[labcams_ps] Teensy trial-triggered mode acknowledged: {0}".format(state))
+                return None
+            if stripped and stripped[0] == "D":
+                parts = stripped.split(cam_stim_trigger.SEP)
+                if len(parts) >= 2:
+                    _display("[labcams_ps] Teensy max trial duration acknowledged: {0} ms".format(parts[1]))
                 return None
         return _ORIGINAL_CAMSTIM_PROCESS_MESSAGE(self, tread, msg)
 
@@ -474,6 +479,16 @@ def _patch_gui_docks() -> None:
         trial_triggered.setToolTip("When checked, Teensy waits for behavior trial_start/trial_stop. When unchecked, Preview can run continuously while armed.")
         layout.addWidget(trial_triggered)
 
+        timeout_row = QHBoxLayout()
+        max_trial_spin = QSpinBox()
+        max_trial_spin.setRange(0, 600)
+        max_trial_spin.setValue(5)
+        max_trial_spin.setSuffix(" s")
+        max_trial_spin.setToolTip("Safety stop if trial_stop is missed. Set to 0 to disable.")
+        timeout_row.addWidget(QLabel("Max trial"))
+        timeout_row.addWidget(max_trial_spin)
+        layout.addLayout(timeout_row)
+
         mode_row = QHBoxLayout()
         mode_combo = QComboBox()
         mode_combo.addItem("Violet / 415 nm", 1)
@@ -498,12 +513,20 @@ def _patch_gui_docks() -> None:
         def set_trial_triggered(enabled):
             try:
                 trigger.inQ.put("G_{0}".format(1 if enabled else 0))
+                trigger.inQ.put("D_{0}".format(int(max_trial_spin.value()) * 1000))
                 state = "on" if enabled else "off"
                 status.setText("Trial-triggered: {0}".format(state))
                 _display("[labcams_ps] Trial-triggered acquisition {0}".format(state))
             except Exception as err:
                 status.setText("Could not set trial-triggered mode: {0}".format(err))
                 _display("[labcams_ps] WARNING: Could not set trial-triggered mode: {0}".format(err))
+
+        def set_max_trial_duration(_value):
+            try:
+                trigger.inQ.put("D_{0}".format(int(max_trial_spin.value()) * 1000))
+                _display("[labcams_ps] Max trial duration set to {0} s".format(max_trial_spin.value()))
+            except Exception as err:
+                _display("[labcams_ps] WARNING: Could not set max trial duration: {0}".format(err))
 
         def apply_mode(index):
             if index < 0:
@@ -525,6 +548,7 @@ def _patch_gui_docks() -> None:
 
         mode_combo.currentIndexChanged.connect(apply_mode)
         trial_triggered.toggled.connect(set_trial_triggered)
+        max_trial_spin.valueChanged.connect(set_max_trial_duration)
         arm_button.clicked.connect(arm_leds)
         disarm_button.clicked.connect(disarm_leds)
         apply_mode(mode_combo.currentIndex())

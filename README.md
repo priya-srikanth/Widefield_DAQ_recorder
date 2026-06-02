@@ -145,7 +145,9 @@ The trial-gated config asks the wrapper to set the PCO trigger mode to external 
 
 The `LED Control` dock has a `Trial-triggered` checkbox. Leave it unchecked for alignment/preview: when armed, the Teensy free-runs camera trigger pulses and the PCO Status Expos line gates the selected LED. Check it immediately before the behavior task: the Teensy then waits for behavior `trial_start` on pin 20 and stops frame triggers/LED gates on behavior `trial_stop` on pin 22.
 
-If the labcams console shows `[CamStimTrigger] Unknown message: E1` after launch, the Teensy is still running older firmware that does not understand the trial-trigger command; flash the current `trial_gated_camera_dual_wavelength.ino`. If preview free-runs the camera but LEDs stay off, check that PCO SMA output #4 is physically routed to Teensy pin 3 and that camera/Teensy grounds are shared.
+The `Max trial` value is a safety timeout for trial-triggered mode. The default is 5 s; set it to 0 to disable. If trial stop is missed, the Teensy stops frame triggers and LEDs when this timeout expires.
+
+If the labcams console shows `[CamStimTrigger] Unknown message: E1` after launch, the Teensy is still running older firmware that does not understand the trial-trigger command; flash the current `trial_gated_camera_dual_wavelength.ino`. If preview free-runs the camera but LEDs stay off, check that PCO SMA output #4 is physically routed to Teensy pin 3 and that camera/Teensy grounds are shared. If trial starts are detected but trial stops are not, check behavior Arduino pin 9 -> Teensy pin 22 wiring and shared ground.
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 

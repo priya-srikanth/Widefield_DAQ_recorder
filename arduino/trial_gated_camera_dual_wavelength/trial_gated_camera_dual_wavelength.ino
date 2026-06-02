@@ -23,7 +23,7 @@
 // labcams CamStimInterface-compatible protocol:
 //   @Q -> @Q_NCHANNELS_2_MODES_415nm:470nm:both
 //   @C -> @C_1 or @C_2
-//   @M_<mode>, @G_<0_or_1>, @N, @S
+//   @M_<mode>, @G_<0_or_1>, @D_<max_trial_ms>, @N, @S
 
 const byte PIN_TRIAL_START = 20;
 const byte PIN_TRIAL_STOP  = 22;
@@ -54,6 +54,7 @@ const uint32_t CAMERA_TRIGGER_US = 1000;  // frame-start trigger pulse width
 #define SYNC            'T'
 #define SET_MODE        'M'
 #define SET_TRIAL_GATE  'G'
+#define SET_MAX_TRIAL_MS 'D'
 #define TRIAL_EVENT     'R'
 
 volatile uint8_t mode = 3;       // 1: 415, 2: 470, 3: alternate
@@ -62,6 +63,8 @@ volatile uint8_t trial_active = 0;
 volatile uint8_t trial_gated = 0; // 0: preview/free-run while armed, 1: require trial_start/stop
 volatile uint8_t last_trial_start_state = LOW;
 volatile uint8_t last_trial_stop_state = LOW;
+volatile uint32_t trial_start_ms = 0;
+volatile uint32_t max_trial_ms = 5000; // safety stop if trial_stop TTL is missed; 0 disables
 
 volatile uint32_t pulse_count = 0;
 volatile uint32_t last_pulse_count = 0;
@@ -109,6 +112,7 @@ void trial_start_received() {
   if (digitalReadFast(PIN_TRIAL_START) == HIGH) {
     last_trial_start_state = HIGH;
     trial_active = 1;
+    trial_start_ms = millis();
     next_frame_us = micros();
     last_trial_code = 1;
     last_trial_frame = pulse_count;
@@ -165,6 +169,17 @@ void poll_trial_inputs() {
 
   last_trial_start_state = start_state;
   last_trial_stop_state = stop_state;
+
+  if (trial_gated && trial_active && max_trial_ms > 0) {
+    uint32_t elapsed = millis() - trial_start_ms;
+    if (elapsed >= max_trial_ms) {
+      trial_active = 0;
+      all_outputs_low();
+      last_trial_code = 3;  // safety timeout
+      last_trial_frame = pulse_count;
+      last_trial_ms = elapsed_ms();
+    }
+  }
 }
 
 byte led_for_next_frame() {
@@ -345,6 +360,15 @@ void serialEvent() {
             reply += SET_TRIAL_GATE;
             Serial.print(reply); Serial.print(SEP);
             Serial.print((int)trial_gated); Serial.print(ETX);
+            break;
+
+          case SET_MAX_TRIAL_MS:
+            token = strtok(msg, SEP);
+            token = strtok(NULL, SEP);
+            max_trial_ms = token ? atol(token) : 5000;
+            reply += SET_MAX_TRIAL_MS;
+            Serial.print(reply); Serial.print(SEP);
+            Serial.print(max_trial_ms); Serial.print(ETX);
             break;
 
           case QUERY_NCHANNELS:
