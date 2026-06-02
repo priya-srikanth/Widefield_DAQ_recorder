@@ -54,6 +54,15 @@
       "max_val": 6.0,
       "scale": 1.0,
       "terminal_config": "DIFF"
+    },
+    {
+      "name": "trial_end",
+      "physical_channel": "ai5",
+      "enabled": true,
+      "min_val": -1.0,
+      "max_val": 6.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
     }
   ],
   "digital_channels": [
@@ -104,6 +113,7 @@
     "di:port0/line3",
     "di:port0/line1",
     "ai:ai4",
+    "ai:ai5",
     "ai:ai0",
     "di:port0/line7",
     "di:port0/line0",

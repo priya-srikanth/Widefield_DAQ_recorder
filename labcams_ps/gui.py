@@ -122,12 +122,13 @@ def _patch_offline_pco() -> None:
     cams.Camera._ps_offline_pco_patch = True
 
 _ORIGINAL_PCO_CAM_INIT = None
+_ORIGINAL_PCO_CAM_CONSTRUCTOR = None
 
 
 def _patch_pco_hwio4_status_expos() -> None:
     """Prefer the pco.python helper for enabling PCO line 4 exposure output."""
 
-    global _ORIGINAL_PCO_CAM_INIT
+    global _ORIGINAL_PCO_CAM_INIT, _ORIGINAL_PCO_CAM_CONSTRUCTOR
     try:
         import labcams.pco as lab_pco
     except Exception:
@@ -136,7 +137,12 @@ def _patch_pco_hwio4_status_expos() -> None:
     if getattr(lab_pco.PCOCam, "_ps_hwio4_patch", False):
         return
 
+    _ORIGINAL_PCO_CAM_CONSTRUCTOR = lab_pco.PCOCam.__init__
     _ORIGINAL_PCO_CAM_INIT = lab_pco.PCOCam._cam_init
+
+    def __init_with_trigger_mode(self, *args, **kwargs):
+        self.trigger_mode = kwargs.pop("trigger_mode", None)
+        _ORIGINAL_PCO_CAM_CONSTRUCTOR(self, *args, **kwargs)
 
     def _cam_init_with_status_expos(self):
         _ORIGINAL_PCO_CAM_INIT(self)
@@ -146,12 +152,12 @@ def _patch_pco_hwio4_status_expos() -> None:
                 _display("[labcams_ps] PCO acquire mode set to {0}".format(self.acquire_mode))
             except Exception as err:
                 _display("[labcams_ps] WARNING: Could not set PCO acquire mode {0}: {1}".format(self.acquire_mode, err))
-        if getattr(self, "acquire_mode", "auto") == "external":
+        if getattr(self, "trigger_mode", None):
             try:
-                self.cam.sdk.set_trigger_mode("external synchronized")
-                _display("[labcams_ps] PCO trigger mode set to external synchronized")
+                self.cam.sdk.set_trigger_mode(self.trigger_mode)
+                _display("[labcams_ps] PCO trigger mode set to {0}".format(self.trigger_mode))
             except Exception as err:
-                _display("[labcams_ps] WARNING: Could not set PCO external trigger mode: {0}".format(err))
+                _display("[labcams_ps] WARNING: Could not set PCO trigger mode {0}: {1}".format(self.trigger_mode, err))
         configure = getattr(self.cam, "configureHWIO_4_statusExpos", None)
         if configure is None:
             return
@@ -169,6 +175,7 @@ def _patch_pco_hwio4_status_expos() -> None:
                 return
         _display("[labcams_ps] PCO HWIO4 configured for Status Expos output: {0}".format(ok))
 
+    lab_pco.PCOCam.__init__ = __init_with_trigger_mode
     lab_pco.PCOCam._cam_init = _cam_init_with_status_expos
     lab_pco.PCOCam._ps_hwio4_patch = True
 

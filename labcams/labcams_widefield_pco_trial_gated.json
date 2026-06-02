@@ -6,7 +6,8 @@
       "name": "pco_edge",
       "exposure": 16,
       "binning": 4,
-      "acquire_mode": "external",
+      "acquire_mode": "auto",
+      "trigger_mode": "external exposure start & software trigger",
       "recorder": {
         "format": "binary",
         "subfolder": "raw_widefield_data",
