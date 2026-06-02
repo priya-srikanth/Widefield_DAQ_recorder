@@ -2,12 +2,12 @@
 //
 // Behavior trial_start from behavior Arduino pin 6 into Teensy pin 20
 // enables camera-trigger pulses.
-// Behavior trial_stop from behavior Arduino pin 9 into Teensy pin 22
+// Behavior trial_stop from behavior Arduino pin 9 into Teensy pin 19
 // disables camera-trigger pulses and LED gates.
 //
 // Wiring expectation:
 //   pin 20: behavior trial_start TTL input, from behavior Arduino pin 6
-//   pin 22: behavior trial_stop TTL input, from behavior Arduino pin 9
+//   pin 19: behavior trial_stop TTL input, from behavior Arduino pin 9
 //   pin 18: Teensy camera trigger TTL output -> PCO SMA input #1
 //   pin  3: PCO SMA output #4 Status Expos input -> gates LEDs during exposure
 //   pin  5: 415 nm/violet LED TTL output
@@ -26,7 +26,7 @@
 //   @M_<mode>, @G_<0_or_1>, @D_<max_trial_ms>, @N, @S
 
 const byte PIN_TRIAL_START = 20;
-const byte PIN_TRIAL_STOP  = 22;
+const byte PIN_TRIAL_STOP  = 19;
 const byte PIN_PCO_STATUS_EXPOS = 3;
 const byte PIN_GLOBAL_SYNC = 4;
 

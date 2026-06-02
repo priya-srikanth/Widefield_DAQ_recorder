@@ -70,7 +70,7 @@ Diagnostics and utilities:
 - `arduino/treadmill_rh/treadmill_rh.ino` - Teensy treadmill encoder firmware that outputs speed on DAC/A14 for DAQ recording.
 - `arduino/stim_camera_trigger_dual_wavelength/stim_camera_trigger_dual_wavelength.ino` - Teensy camera/dual-wavelength trigger firmware used by labcams excitation triggering.
 - `arduino/constant_camera_dual_wavelength/constant_camera_dual_wavelength.ino` - labcams-compatible imaging Teensy firmware for PCO exposure-gated dual-wavelength LED triggering with this rig's pin map.
-- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - labcams-compatible Teensy firmware that waits for behavior `trial_start` on pin 20, emits PCO frame-start trigger pulses on pin 18 during the trial, gates 415/470 LEDs from PCO Status Expos on pin 3, and stops on behavior `trial_stop` on pin 22.
+- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - labcams-compatible Teensy firmware that waits for behavior `trial_start` on pin 20, emits PCO frame-start trigger pulses on pin 18 during the trial, gates 415/470 LEDs from PCO Status Expos on pin 3, and stops on behavior `trial_stop` on pin 19.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
@@ -134,7 +134,7 @@ cd "C:\Github\Widefield_DAQ_recorder"
 For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` to the labcams Teensy and wire:
 
 - behavior Arduino pin 6 `trial_start` TTL -> Teensy pin 20
-- behavior Arduino pin 9 `trial_stop` TTL -> Teensy pin 22
+- behavior Arduino pin 9 `trial_stop` TTL -> Teensy pin 19
 - Teensy pin 18 -> PCO SMA input #1, Exposure Trigger
 - PCO SMA output #4, Status Expos -> Teensy pin 3
 - Teensy pin 5 -> 415 nm/violet LED TTL input
@@ -143,11 +143,13 @@ For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial
 
 The trial-gated config asks the wrapper to set the PCO trigger mode to external exposure start. Pin 18 sends short frame-start pulses; it should not be held high continuously. PCO SMA output #4 should be configured in Camware as `Status Exposure`, `Show common time of 'All lines'`, `On`, `High`.
 
-The `LED Control` dock has a `Trial-triggered` checkbox. Leave it unchecked for alignment/preview: when armed, the Teensy free-runs camera trigger pulses and the PCO Status Expos line gates the selected LED. Check it immediately before the behavior task: the Teensy then waits for behavior `trial_start` on pin 20 and stops frame triggers/LED gates on behavior `trial_stop` on pin 22.
+The `LED Control` dock has a `Trial-triggered` checkbox. Leave it unchecked for alignment/preview: when armed, the Teensy free-runs camera trigger pulses and the PCO Status Expos line gates the selected LED. Check it immediately before the behavior task: the Teensy then waits for behavior `trial_start` on pin 20 and stops frame triggers/LED gates on behavior `trial_stop` on pin 19.
 
 The `Max trial` value is a safety timeout for trial-triggered mode. The default is 5 s; set it to 0 to disable. If trial stop is missed, the Teensy stops frame triggers and LEDs when this timeout expires.
 
-If the labcams console shows `[CamStimTrigger] Unknown message: E1` after launch, the Teensy is still running older firmware that does not understand the trial-trigger command; flash the current `trial_gated_camera_dual_wavelength.ino`. If preview free-runs the camera but LEDs stay off, check that PCO SMA output #4 is physically routed to Teensy pin 3 and that camera/Teensy grounds are shared. If trial starts are detected but trial stops are not, check behavior Arduino pin 9 -> Teensy pin 22 wiring and shared ground.
+In trial-triggered mode, labcams only receives frames while the Teensy is triggering the camera between trial start and trial stop. LED illumination within those frames is further restricted by PCO Status Expos. This reduces file size by not acquiring inter-trial frames, but it does not save only the illuminated rows/lines inside each camera frame.
+
+If the labcams console shows `[CamStimTrigger] Unknown message: E1` after launch, the Teensy is still running older firmware that does not understand the trial-trigger command; flash the current `trial_gated_camera_dual_wavelength.ino`. If preview free-runs the camera but LEDs stay off, check that PCO SMA output #4 is physically routed to Teensy pin 3 and that camera/Teensy grounds are shared. If trial starts are detected but trial stops are not, check behavior Arduino pin 9 -> Teensy pin 19 wiring and shared ground.
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
