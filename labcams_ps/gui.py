@@ -142,31 +142,47 @@ def _patch_pco_hwio4_status_expos() -> None:
 
     def __init_with_trigger_mode(self, *args, **kwargs):
         self.trigger_mode = kwargs.pop("trigger_mode", None)
-        self._ps_skip_external_trigger_for_probe = bool(self.trigger_mode)
+        # The startup probe in upstream PCOCam.__init__ does a synchronous
+        # record(1)/image() to learn the frame shape. Any external-gated mode
+        # (external trigger or external acquire enable) would block that probe
+        # waiting on a signal we haven't started driving yet. Defer the SDK
+        # call until the camera Process re-enters _cam_init at runtime.
+        requested_acquire = kwargs.get("acquire_mode", None)
+        self._ps_skip_external_for_probe = bool(self.trigger_mode) or (
+            requested_acquire is not None and requested_acquire != "auto"
+        )
         try:
             _ORIGINAL_PCO_CAM_CONSTRUCTOR(self, *args, **kwargs)
         finally:
-            self._ps_skip_external_trigger_for_probe = False
+            self._ps_skip_external_for_probe = False
 
     def _cam_init_with_status_expos(self):
         _ORIGINAL_PCO_CAM_INIT(self)
-        if getattr(self, "acquire_mode", "auto") != "auto":
-            try:
-                self.cam.sdk.set_acquire_mode(self.acquire_mode)
-                _display("[labcams_ps] PCO acquire mode set to {0}".format(self.acquire_mode))
-            except Exception as err:
-                _display("[labcams_ps] WARNING: Could not set PCO acquire mode {0}: {1}".format(self.acquire_mode, err))
-        if getattr(self, "_ps_skip_external_trigger_for_probe", False):
-            _display(
-                "[labcams_ps] PCO trigger mode {0} deferred until live acquisition "
-                "so the startup probe frame can complete.".format(self.trigger_mode)
-            )
-        elif getattr(self, "trigger_mode", None):
-            try:
-                self.cam.sdk.set_trigger_mode(self.trigger_mode)
-                _display("[labcams_ps] PCO trigger mode set to {0}".format(self.trigger_mode))
-            except Exception as err:
-                _display("[labcams_ps] WARNING: Could not set PCO trigger mode {0}: {1}".format(self.trigger_mode, err))
+        skip_external = getattr(self, "_ps_skip_external_for_probe", False)
+        if skip_external:
+            if getattr(self, "acquire_mode", "auto") != "auto":
+                _display(
+                    "[labcams_ps] PCO acquire mode {0} deferred until live acquisition "
+                    "so the startup probe frame can complete.".format(self.acquire_mode)
+                )
+            if getattr(self, "trigger_mode", None):
+                _display(
+                    "[labcams_ps] PCO trigger mode {0} deferred until live acquisition "
+                    "so the startup probe frame can complete.".format(self.trigger_mode)
+                )
+        else:
+            if getattr(self, "acquire_mode", "auto") != "auto":
+                try:
+                    self.cam.sdk.set_acquire_mode(self.acquire_mode)
+                    _display("[labcams_ps] PCO acquire mode set to {0}".format(self.acquire_mode))
+                except Exception as err:
+                    _display("[labcams_ps] WARNING: Could not set PCO acquire mode {0}: {1}".format(self.acquire_mode, err))
+            if getattr(self, "trigger_mode", None):
+                try:
+                    self.cam.sdk.set_trigger_mode(self.trigger_mode)
+                    _display("[labcams_ps] PCO trigger mode set to {0}".format(self.trigger_mode))
+                except Exception as err:
+                    _display("[labcams_ps] WARNING: Could not set PCO trigger mode {0}: {1}".format(self.trigger_mode, err))
         configure = getattr(self.cam, "configureHWIO_4_statusExpos", None)
         if configure is None:
             return
