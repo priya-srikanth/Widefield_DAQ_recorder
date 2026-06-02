@@ -70,7 +70,7 @@ Diagnostics and utilities:
 - `arduino/treadmill_rh/treadmill_rh.ino` - Teensy treadmill encoder firmware that outputs speed on DAC/A14 for DAQ recording.
 - `arduino/stim_camera_trigger_dual_wavelength/stim_camera_trigger_dual_wavelength.ino` - Teensy camera/dual-wavelength trigger firmware used by labcams excitation triggering.
 - `arduino/constant_camera_dual_wavelength/constant_camera_dual_wavelength.ino` - labcams-compatible imaging Teensy firmware for PCO exposure-gated dual-wavelength LED triggering with this rig's pin map.
-- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - labcams-compatible Teensy firmware that waits for behavior `trial_start` on pin 20, emits PCO trigger plus 415/470 LED pulses during the trial, and stops on behavior `trial_stop` on pin 22.
+- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - labcams-compatible Teensy firmware that waits for behavior `trial_start` on pin 20, emits PCO frame-start trigger pulses on pin 18 during the trial, gates 415/470 LEDs from PCO Status Expos on pin 3, and stops on behavior `trial_stop` on pin 22.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
@@ -136,11 +136,12 @@ For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial
 - behavior Arduino pin 6 `trial_start` TTL -> Teensy pin 20
 - behavior Arduino pin 9 `trial_stop` TTL -> Teensy pin 22
 - Teensy pin 18 -> PCO SMA input #1, Exposure Trigger
+- PCO SMA output #4, Status Expos -> Teensy pin 3
 - Teensy pin 5 -> 415 nm/violet LED TTL input
 - Teensy pin 6 -> 470 nm/blue LED TTL input
 - optional Teensy pin 7 -> DAQ if you want a direct copy of the generated frame trigger
 
-The trial-gated config asks the wrapper to set the PCO acquire mode to external trigger mode. If the PCO remains in internal/free-run mode, the Teensy will still gate LEDs but will not control camera exposure.
+The trial-gated config asks the wrapper to set the PCO trigger mode to external exposure start. Pin 18 sends short frame-start pulses during each trial; it should not be held high continuously. PCO SMA output #4 should be configured in Camware as `Status Exposure`, `Show common time of 'All lines'`, `On`, `High`. LEDs only turn on while Status Expos is high, so `Arm LEDs`/`Preview` alone will not illuminate LEDs unless a trial-start signal is present and the camera is returning exposure-status pulses.
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
