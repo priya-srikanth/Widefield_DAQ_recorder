@@ -24,6 +24,11 @@ Large outputs should stay in the recording folder, usually under:
 E:\labcams_data\YYYYMMDD\SESSION\motion_corrected
 ```
 
+## Notebooks
+
+- `notebooks/widefield_local_analysis_walkthrough.ipynb` - annotated end-to-end workflow for generating motion/SVD outputs, Allen alignment, cue maps, lick maps, cue-vs-lick maps, alignment diagnostics, ROI label maps, and comparison PowerPoints.
+- `notebooks/local_wfield_processing_template.ipynb` - shorter command template for starting a new session.
+
 ## 1. Motion Correction
 
 Example:
