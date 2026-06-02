@@ -8,13 +8,13 @@
 // Wiring expectation:
 //   pin 20: behavior trial_start TTL input, from behavior Arduino pin 6
 //   pin 22: behavior trial_stop TTL input, from behavior Arduino pin 9
-//   pin  9: Teensy camera trigger TTL output -> PCO external trigger input
+//   pin 18: Teensy camera trigger TTL output -> PCO SMA input #1
 //   pin  5: 415 nm/violet LED TTL output
 //   pin  6: 470 nm/blue LED TTL output
 //   pin  7: optional frame/trigger mirror to DAQ
 //   pin  4: optional global sync TTL input, logged as @T/#SYNC
 //
-// PCO must be configured for external trigger/frame-start mode for pin 9 to
+// PCO must be configured for external trigger/frame-start mode for pin 18 to
 // control exposure. If PCO remains in internal/free-run mode, this sketch can
 // still gate LEDs but will not control camera exposure.
 //
@@ -27,7 +27,7 @@ const byte PIN_TRIAL_START = 20;
 const byte PIN_TRIAL_STOP  = 22;
 const byte PIN_GLOBAL_SYNC = 4;
 
-const byte PIN_PCO_TRIGGER = 9;
+const byte PIN_PCO_TRIGGER = 18;
 const byte PIN_LED0_TRIGGER = 5;  // 415 nm/violet
 const byte PIN_LED1_TRIGGER = 6;  // 470 nm/blue
 const byte PIN_GPIO = 7;          // optional trigger mirror to DAQ

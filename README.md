@@ -135,7 +135,7 @@ For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial
 
 - behavior Arduino pin 6 `trial_start` TTL -> Teensy pin 20
 - behavior Arduino pin 9 `trial_stop` TTL -> Teensy pin 22
-- Teensy pin 9 -> PCO external trigger input
+- Teensy pin 18 -> PCO SMA input #1, Exposure Trigger
 - Teensy pin 5 -> 415 nm/violet LED TTL input
 - Teensy pin 6 -> 470 nm/blue LED TTL input
 - optional Teensy pin 7 -> DAQ if you want a direct copy of the generated frame trigger
