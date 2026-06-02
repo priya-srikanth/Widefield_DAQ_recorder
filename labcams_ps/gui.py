@@ -142,7 +142,11 @@ def _patch_pco_hwio4_status_expos() -> None:
 
     def __init_with_trigger_mode(self, *args, **kwargs):
         self.trigger_mode = kwargs.pop("trigger_mode", None)
-        _ORIGINAL_PCO_CAM_CONSTRUCTOR(self, *args, **kwargs)
+        self._ps_skip_external_trigger_for_probe = bool(self.trigger_mode)
+        try:
+            _ORIGINAL_PCO_CAM_CONSTRUCTOR(self, *args, **kwargs)
+        finally:
+            self._ps_skip_external_trigger_for_probe = False
 
     def _cam_init_with_status_expos(self):
         _ORIGINAL_PCO_CAM_INIT(self)
@@ -152,7 +156,12 @@ def _patch_pco_hwio4_status_expos() -> None:
                 _display("[labcams_ps] PCO acquire mode set to {0}".format(self.acquire_mode))
             except Exception as err:
                 _display("[labcams_ps] WARNING: Could not set PCO acquire mode {0}: {1}".format(self.acquire_mode, err))
-        if getattr(self, "trigger_mode", None):
+        if getattr(self, "_ps_skip_external_trigger_for_probe", False):
+            _display(
+                "[labcams_ps] PCO trigger mode {0} deferred until live acquisition "
+                "so the startup probe frame can complete.".format(self.trigger_mode)
+            )
+        elif getattr(self, "trigger_mode", None):
             try:
                 self.cam.sdk.set_trigger_mode(self.trigger_mode)
                 _display("[labcams_ps] PCO trigger mode set to {0}".format(self.trigger_mode))
