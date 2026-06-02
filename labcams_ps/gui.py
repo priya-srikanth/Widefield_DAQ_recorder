@@ -14,9 +14,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from multiprocessing import Event, Lock, Queue, Value
+import json
 import os
+from pathlib import Path
+import sys
 
 import numpy as np
+
+
+_CONFIG_PATH = None
 
 
 def _display(message: str) -> None:
@@ -134,6 +140,18 @@ def _patch_pco_hwio4_status_expos() -> None:
 
     def _cam_init_with_status_expos(self):
         _ORIGINAL_PCO_CAM_INIT(self)
+        if getattr(self, "acquire_mode", "auto") != "auto":
+            try:
+                self.cam.sdk.set_acquire_mode(self.acquire_mode)
+                _display("[labcams_ps] PCO acquire mode set to {0}".format(self.acquire_mode))
+            except Exception as err:
+                _display("[labcams_ps] WARNING: Could not set PCO acquire mode {0}: {1}".format(self.acquire_mode, err))
+        if getattr(self, "acquire_mode", "auto") == "external":
+            try:
+                self.cam.sdk.set_trigger_mode("external synchronized")
+                _display("[labcams_ps] PCO trigger mode set to external synchronized")
+            except Exception as err:
+                _display("[labcams_ps] WARNING: Could not set PCO external trigger mode: {0}".format(err))
         configure = getattr(self.cam, "configureHWIO_4_statusExpos", None)
         if configure is None:
             return
@@ -154,6 +172,40 @@ def _patch_pco_hwio4_status_expos() -> None:
     lab_pco.PCOCam._cam_init = _cam_init_with_status_expos
     lab_pco.PCOCam._ps_hwio4_patch = True
 
+
+_ORIGINAL_CAMSTIM_PROCESS_MESSAGE = None
+
+
+def _patch_camstim_trial_messages() -> None:
+    """Log trial start/stop messages from the trial-gated Teensy firmware."""
+
+    global _ORIGINAL_CAMSTIM_PROCESS_MESSAGE
+    try:
+        import labcams.cam_stim_trigger as cam_stim_trigger
+    except Exception:
+        return
+
+    if getattr(cam_stim_trigger.CamStimInterface, "_ps_trial_message_patch", False):
+        return
+
+    _ORIGINAL_CAMSTIM_PROCESS_MESSAGE = cam_stim_trigger.CamStimInterface.process_message
+
+    def process_message_with_trials(self, tread, msg):
+        if msg.startswith(cam_stim_trigger.STX) and msg[-1].endswith(cam_stim_trigger.ETX):
+            stripped = msg.strip(cam_stim_trigger.STX).strip(cam_stim_trigger.ETX)
+            if stripped and stripped[0] == "R":
+                parts = stripped.split(cam_stim_trigger.SEP)
+                if len(parts) >= 4:
+                    code = int(parts[1])
+                    frame = int(parts[2])
+                    t_ms = float(parts[3])
+                    name = "start" if code == 1 else "stop" if code == 2 else "unknown"
+                    return ["#TRIAL:{0},{1},{2},{3}".format(name, code, frame, t_ms)]
+        return _ORIGINAL_CAMSTIM_PROCESS_MESSAGE(self, tread, msg)
+
+    cam_stim_trigger.CamStimInterface.process_message = process_message_with_trials
+    cam_stim_trigger.CamStimInterface._ps_trial_message_patch = True
+
 def _patch_gui_docks() -> None:
     """Add Priya-rig workflow docks to the labcams GUI."""
 
@@ -166,7 +218,9 @@ def _patch_gui_docks() -> None:
         QHBoxLayout,
         QLabel,
         QLineEdit,
+        QMessageBox,
         QPushButton,
+        QSpinBox,
         QVBoxLayout,
         QWidget,
     )
@@ -190,6 +244,7 @@ def _patch_gui_docks() -> None:
         self._ps_add_session_save_dock()
         self._ps_add_preview_dock()
         self._ps_add_led_control_dock()
+        self._ps_add_crop_dock()
         self._ps_add_alignment_dock()
         QTimer.singleShot(0, self._ps_hide_upstream_led_dock)
         QTimer.singleShot(500, self._ps_hide_upstream_led_dock)
@@ -411,6 +466,221 @@ def _patch_gui_docks() -> None:
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_led_control_dock = dock
 
+    def add_crop_dock(self):
+        if not getattr(self, "camwidgets", None):
+            return
+
+        try:
+            import pyqtgraph as pg
+        except Exception:
+            pg = None
+
+        dock = QDockWidget("Camera Crop / ROI", self)
+        dock.setObjectName("ps_camera_crop")
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        info = QLabel(
+            "Select a PCO hardware ROI before recording. Accept writes the ROI "
+            "to the active config; restart labcams for the camera to acquire only "
+            "that cropped window."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        row = QHBoxLayout()
+        camera_select = QComboBox()
+        for i, cam in enumerate(self.cams):
+            camera_select.addItem("{0}: {1}".format(i, cam.name), i)
+        row.addWidget(QLabel("Camera"))
+        row.addWidget(camera_select)
+        layout.addLayout(row)
+
+        x0_spin = QSpinBox()
+        y0_spin = QSpinBox()
+        x1_spin = QSpinBox()
+        y1_spin = QSpinBox()
+        for spin in (x0_spin, y0_spin, x1_spin, y1_spin):
+            spin.setRange(1, 100000)
+
+        coord_row1 = QHBoxLayout()
+        coord_row1.addWidget(QLabel("x0"))
+        coord_row1.addWidget(x0_spin)
+        coord_row1.addWidget(QLabel("y0"))
+        coord_row1.addWidget(y0_spin)
+        layout.addLayout(coord_row1)
+
+        coord_row2 = QHBoxLayout()
+        coord_row2.addWidget(QLabel("x1"))
+        coord_row2.addWidget(x1_spin)
+        coord_row2.addWidget(QLabel("y1"))
+        coord_row2.addWidget(y1_spin)
+        layout.addLayout(coord_row2)
+
+        button_row = QHBoxLayout()
+        draw_button = QPushButton("Draw ROI")
+        read_button = QPushButton("Read Box")
+        accept_button = QPushButton("Accept ROI")
+        clear_button = QPushButton("Clear ROI")
+        button_row.addWidget(draw_button)
+        button_row.addWidget(read_button)
+        button_row.addWidget(accept_button)
+        button_row.addWidget(clear_button)
+        layout.addLayout(button_row)
+
+        status = QLabel("No ROI selected")
+        status.setWordWrap(True)
+        layout.addWidget(status)
+
+        roi_item = {"item": None}
+
+        def selected_index():
+            return int(camera_select.currentData())
+
+        def selected_camera():
+            return self.cams[selected_index()]
+
+        def selected_widget():
+            return self.camwidgets[selected_index()]
+
+        def current_dims():
+            cam = selected_camera().cam
+            width = int(getattr(cam, "w").value)
+            height = int(getattr(cam, "h").value)
+            return width, height
+
+        def set_spin_limits():
+            width, height = current_dims()
+            x0_spin.setRange(1, width)
+            x1_spin.setRange(1, width)
+            y0_spin.setRange(1, height)
+            y1_spin.setRange(1, height)
+            if x1_spin.value() <= 1:
+                x0_spin.setValue(1)
+                y0_spin.setValue(1)
+                x1_spin.setValue(width)
+                y1_spin.setValue(height)
+
+        def remove_roi_item():
+            item = roi_item.get("item")
+            if item is not None:
+                try:
+                    selected_widget().p1.removeItem(item)
+                except Exception:
+                    pass
+            roi_item["item"] = None
+
+        def draw_roi():
+            if pg is None:
+                status.setText("pyqtgraph ROI tools unavailable")
+                return
+            remove_roi_item()
+            width, height = current_dims()
+            roi = pg.RectROI(
+                pos=[max(0, width * 0.2), max(0, height * 0.2)],
+                size=[max(16, width * 0.6), max(16, height * 0.6)],
+                pen=pg.mkPen("y", width=2),
+            )
+            selected_widget().p1.addItem(roi)
+            roi_item["item"] = roi
+            status.setText("Drag/resize yellow ROI, then Read Box or Accept ROI")
+
+        def read_roi_box():
+            set_spin_limits()
+            item = roi_item.get("item")
+            width, height = current_dims()
+            if item is None:
+                x0 = x0_spin.value()
+                y0 = y0_spin.value()
+                x1 = x1_spin.value()
+                y1 = y1_spin.value()
+            else:
+                pos = item.pos()
+                size = item.size()
+                x0 = int(round(float(pos.x()))) + 1
+                y0 = int(round(float(pos.y()))) + 1
+                x1 = int(round(float(pos.x() + size.x())))
+                y1 = int(round(float(pos.y() + size.y())))
+            x0 = max(1, min(width - 1, x0))
+            y0 = max(1, min(height - 1, y0))
+            x1 = max(x0 + 1, min(width, x1))
+            y1 = max(y0 + 1, min(height, y1))
+            x0_spin.setValue(x0)
+            y0_spin.setValue(y0)
+            x1_spin.setValue(x1)
+            y1_spin.setValue(y1)
+            return [x0, y0, x1, y1]
+
+        def update_config_roi(roi):
+            if _CONFIG_PATH is None:
+                return False
+            config_path = Path(_CONFIG_PATH)
+            try:
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                cam_idx = selected_index()
+                if roi is None:
+                    config["cams"][cam_idx].pop("roi", None)
+                else:
+                    config["cams"][cam_idx]["roi"] = [int(v) for v in roi]
+                config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+                return True
+            except Exception as err:
+                _display("[labcams_ps] WARNING: Could not update ROI in config: {0}".format(err))
+                return False
+
+        def accept_roi():
+            if self.recController.saveOnStartToggle.isChecked():
+                status.setText("Stop recording before changing camera ROI")
+                return
+            roi = read_roi_box()
+            cam = selected_camera()
+            try:
+                cam.cam.roi = roi
+            except Exception:
+                pass
+            wrote_config = update_config_roi(roi)
+            remove_roi_item()
+            suffix = " Config updated; restart labcams before recording." if wrote_config else " Restart labcams before recording."
+            status.setText("Accepted ROI {0}.{1}".format(roi, suffix))
+            _display("[labcams_ps] Accepted PCO ROI {0}.{1}".format(roi, suffix))
+            QMessageBox.information(
+                self,
+                "ROI accepted",
+                "ROI {0} was accepted.\n\nRestart labcams before recording for the PCO camera to initialize with this hardware ROI.".format(roi),
+            )
+
+        def clear_roi():
+            if self.recController.saveOnStartToggle.isChecked():
+                status.setText("Stop recording before clearing camera ROI")
+                return
+            width, height = current_dims()
+            cam = selected_camera()
+            try:
+                cam.cam.roi = None
+            except Exception:
+                pass
+            wrote_config = update_config_roi(None)
+            remove_roi_item()
+            x0_spin.setValue(1)
+            y0_spin.setValue(1)
+            x1_spin.setValue(width)
+            y1_spin.setValue(height)
+            suffix = " Config updated; restart labcams before recording." if wrote_config else " Restart labcams before recording."
+            status.setText("Cleared ROI/full frame requested.{0}".format(suffix))
+            _display("[labcams_ps] Cleared PCO ROI/full frame requested.{0}".format(suffix))
+
+        camera_select.currentIndexChanged.connect(lambda _idx: set_spin_limits())
+        draw_button.clicked.connect(draw_roi)
+        read_button.clicked.connect(read_roi_box)
+        accept_button.clicked.connect(accept_roi)
+        clear_button.clicked.connect(clear_roi)
+        set_spin_limits()
+
+        dock.setWidget(widget)
+        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        self.ps_camera_crop_dock = dock
+
     def add_alignment_dock(self):
         if not getattr(self, "camwidgets", None):
             return
@@ -524,6 +794,7 @@ def _patch_gui_docks() -> None:
     gui.LabCamsGUI._ps_add_session_save_dock = add_session_save_dock
     gui.LabCamsGUI._ps_add_preview_dock = add_preview_dock
     gui.LabCamsGUI._ps_add_led_control_dock = add_led_control_dock
+    gui.LabCamsGUI._ps_add_crop_dock = add_crop_dock
     gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
     gui.LabCamsGUI._ps_gui_docks_patch = True
 
@@ -533,10 +804,16 @@ def apply_patches() -> None:
 
     _patch_offline_pco()
     _patch_pco_hwio4_status_expos()
+    _patch_camstim_trial_messages()
     _patch_gui_docks()
 
 
 def main() -> None:
+    global _CONFIG_PATH
+    for arg in sys.argv[1:]:
+        if arg.lower().endswith(".json"):
+            _CONFIG_PATH = arg
+            break
     apply_patches()
     from labcams.gui import main as labcams_main
 

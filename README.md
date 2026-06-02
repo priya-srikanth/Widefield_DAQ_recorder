@@ -70,9 +70,11 @@ Diagnostics and utilities:
 - `arduino/treadmill_rh/treadmill_rh.ino` - Teensy treadmill encoder firmware that outputs speed on DAC/A14 for DAQ recording.
 - `arduino/stim_camera_trigger_dual_wavelength/stim_camera_trigger_dual_wavelength.ino` - Teensy camera/dual-wavelength trigger firmware used by labcams excitation triggering.
 - `arduino/constant_camera_dual_wavelength/constant_camera_dual_wavelength.ino` - labcams-compatible imaging Teensy firmware for PCO exposure-gated dual-wavelength LED triggering with this rig's pin map.
+- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - labcams-compatible Teensy firmware that waits for behavior `trial_start` on pin 20, emits PCO trigger plus 415/470 LED pulses during the trial, and stops on behavior `trial_stop` on pin 22.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
+- `labcams/labcams_widefield_pco_trial_gated.json` - PCO labcams config for trial-gated acquisition using the Teensy as the external PCO frame trigger source.
 - `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
 - `wfield_local/` - local widefield processing helpers for motion correction, SVD/hemodynamic correction, Allen alignment, cue/lick-aligned plots, alignment diagnostics, and NeuroCAAS compatibility launch.
 - `requirements.txt` - Python package dependencies.
@@ -122,11 +124,31 @@ cd "C:\Github\Widefield_DAQ_recorder"
 & "C:\ProgramData\anaconda3\envs\labcams\python.exe" -m labcams_ps.gui ".\labcams\labcams_widefield_pco_only.json" -w
 ```
 
+Trial-gated PCO launch. Use this when the behavior rig sends trial-start/trial-stop TTLs to the labcams Teensy and the Teensy triggers the PCO:
+
+```powershell
+cd "C:\Github\Widefield_DAQ_recorder"
+& "C:\ProgramData\anaconda3\envs\labcams\python.exe" -m labcams_ps.gui ".\labcams\labcams_widefield_pco_trial_gated.json" -w
+```
+
+For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` to the labcams Teensy and wire:
+
+- behavior Arduino2 pin 9 `trial_start` TTL -> Teensy pin 20
+- behavior `trial_stop` TTL -> Teensy pin 22
+- Teensy pin 9 -> PCO external trigger input
+- Teensy pin 5 -> 415 nm/violet LED TTL input
+- Teensy pin 6 -> 470 nm/blue LED TTL input
+- optional Teensy pin 7 -> DAQ if you want a direct copy of the generated frame trigger
+
+The trial-gated config asks the wrapper to set the PCO acquire mode to external trigger mode. If the PCO remains in internal/free-run mode, the Teensy will still gate LEDs but will not control camera exposure.
+
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
 The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder.
 
 The `Alignment Preview` dock lets you choose a prior alignment snapshot; it displays the saved reference in red over the live preview in green so the animal/window can be physically aligned before recording. `Clear` removes the overlay. This mode changes display only and does not alter recorded frames.
+
+The `Camera Crop / ROI` dock lets you draw or enter a PCO ROI rectangle. `Accept ROI` writes that ROI into the active labcams JSON config, and `Clear ROI` removes it. Restart labcams before recording after changing ROI so the PCO camera initializes with the requested hardware crop.
 
 ## wfield NeuroCAAS Launcher
 
