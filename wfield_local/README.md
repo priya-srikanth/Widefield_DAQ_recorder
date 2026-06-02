@@ -337,24 +337,33 @@ python .\wfield_local\plot_treadmill_running_qc.py `
   --daq-h5 "E:\DAQ_recorder_output\PS95_baseline_20260601_153627.h5" `
   --output "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\treadmill_qc" `
   --channel treadmill `
-  --offset-v auto `
-  --volt-sec-per-rot <YOUR_CALIBRATION_VALUE> `
-  --mm-per-rot <WHEEL_CIRCUMFERENCE_MM> `
-  --smoothing-sigma-s 0.100 `
-  --thresh-speed 10.0 `
-  --max-gap-duration 0.250 `
-  --min-duration 0.500
+  --smoothing-sigma-s 0.15 `
+  --thresh-speed 5.0 `
+  --max-gap-duration 0.3 `
+  --min-duration 2.0
 ```
 
 Important parameters:
 
-- `--offset-v`: voltage zero offset. Use a known per-rig value when available; `auto` uses the session median for QC only.
-- `--volt-sec-per-rot`: encoder calibration constant.
-- `--mm-per-rot`: treadmill wheel circumference.
-- `--smoothing-sigma-s`: Gaussian smoothing sigma in seconds.
-- `--thresh-speed`: speed threshold in mm/s for running.
-- `--max-gap-duration`: fill below-threshold gaps shorter than this duration.
-- `--min-duration`: discard bouts shorter than this duration.
+- `--offset-v`: voltage zero offset. Default is the legacy cohort value `1.2587643276652853`.
+- `--volt-sec-per-rot`: encoder calibration constant. Default is the legacy cohort value `0.382`.
+- `--mm-per-rot`: wheel circumference. Default is the legacy cohort value `29.25`.
+- `--smoothing-sigma-s`: Gaussian smoothing sigma in seconds. Default is `0.15`.
+- `--thresh-speed`: speed threshold in mm/s for running. Default is `5.0`.
+- `--max-gap-duration`: fill below-threshold gaps shorter than this duration. Default is `0.3`.
+- `--min-duration`: discard bouts shorter than this duration. Default is `2.0`.
+
+Default legacy cohort constants:
+
+```text
+OFFSET_IN_VOLTS = 1.2587643276652853
+VOLT_SEC_PER_ROT = 0.382
+MM_PER_ROT = 29.25
+SMOOTHING_SIGMA_SEC = 0.15
+THRESH_SPEED_MM_PER_S = 5.0
+MAX_GAP_DURATION_SEC = 0.3
+MIN_DURATION_SEC = 2.0
+```
 
 Outputs:
 
@@ -373,19 +382,16 @@ python .\wfield_local\plot_running_activity_maps.py `
   --allen-dir "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\wfield_local_results\allen_aligned_v6" `
   --output "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\treadmill_qc" `
   --channel treadmill `
-  --offset-v auto `
-  --volt-sec-per-rot <YOUR_CALIBRATION_VALUE> `
-  --mm-per-rot <WHEEL_CIRCUMFERENCE_MM> `
-  --smoothing-sigma-s 0.100 `
-  --thresh-speed 10.0 `
-  --max-gap-duration 0.250 `
-  --min-duration 0.500
+  --smoothing-sigma-s 0.15 `
+  --thresh-speed 5.0 `
+  --max-gap-duration 0.3 `
+  --min-duration 2.0
 ```
 
 This maps corrected imaging frames to DAQ samples through the DAQ-recorded
 `pco_exposure` pulse train, then averages `SVTcorr` frames classified as
 running versus not running. Treat `--offset-v auto` as a QC convenience; for
-final analysis, prefer a known rig/session offset.
+final analysis, prefer the legacy default or a known rig/session override.
 
 ## NeuroCAAS Compatibility Launcher
 

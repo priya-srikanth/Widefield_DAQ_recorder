@@ -31,6 +31,15 @@ except ImportError:  # Allow direct script execution.
     )
 
 
+DEFAULT_OFFSET_V = 1.2587643276652853
+DEFAULT_VOLT_SEC_PER_ROT = 0.382
+DEFAULT_MM_PER_ROT = 29.25
+DEFAULT_SMOOTHING_SIGMA_S = 0.15
+DEFAULT_THRESH_SPEED_MM_S = 5.0
+DEFAULT_MAX_GAP_DURATION_S = 0.3
+DEFAULT_MIN_DURATION_S = 2.0
+
+
 def _decode_analog_channel(f: h5py.File, channel_name: str) -> np.ndarray:
     names = [name.decode() for name in f["analog/channel_names"][:]]
     if channel_name not in names:
@@ -191,15 +200,15 @@ def main() -> int:
     parser.add_argument("--channel", default="treadmill")
     parser.add_argument(
         "--offset-v",
-        default="auto",
-        help="Voltage offset to subtract, or 'auto' to use the median voltage.",
+        default=str(DEFAULT_OFFSET_V),
+        help="Voltage offset to subtract, or 'auto' to use the median voltage. Default matches legacy cohort config.",
     )
-    parser.add_argument("--volt-sec-per-rot", type=float, required=True)
-    parser.add_argument("--mm-per-rot", type=float, required=True)
-    parser.add_argument("--smoothing-sigma-s", type=float, default=0.100)
-    parser.add_argument("--thresh-speed", type=float, default=10.0)
-    parser.add_argument("--max-gap-duration", type=float, default=0.250)
-    parser.add_argument("--min-duration", type=float, default=0.500)
+    parser.add_argument("--volt-sec-per-rot", type=float, default=DEFAULT_VOLT_SEC_PER_ROT)
+    parser.add_argument("--mm-per-rot", type=float, default=DEFAULT_MM_PER_ROT)
+    parser.add_argument("--smoothing-sigma-s", type=float, default=DEFAULT_SMOOTHING_SIGMA_S)
+    parser.add_argument("--thresh-speed", type=float, default=DEFAULT_THRESH_SPEED_MM_S)
+    parser.add_argument("--max-gap-duration", type=float, default=DEFAULT_MAX_GAP_DURATION_S)
+    parser.add_argument("--min-duration", type=float, default=DEFAULT_MIN_DURATION_S)
     parser.add_argument("--example-window-s", type=float, default=10.0)
     args = parser.parse_args()
 

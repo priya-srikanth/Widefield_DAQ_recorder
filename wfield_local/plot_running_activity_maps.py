@@ -20,6 +20,15 @@ except ImportError:  # Allow direct script execution.
     from treadmill import bout_edges, calibrate_treadmill, find_running_bouts, smooth_treadmill
 
 
+DEFAULT_OFFSET_V = 1.2587643276652853
+DEFAULT_VOLT_SEC_PER_ROT = 0.382
+DEFAULT_MM_PER_ROT = 29.25
+DEFAULT_SMOOTHING_SIGMA_S = 0.15
+DEFAULT_THRESH_SPEED_MM_S = 5.0
+DEFAULT_MAX_GAP_DURATION_S = 0.3
+DEFAULT_MIN_DURATION_S = 2.0
+
+
 def _rising_edges(x: np.ndarray) -> np.ndarray:
     return np.flatnonzero(np.diff(x.astype(np.int8), prepend=0) == 1).astype(np.int64)
 
@@ -90,13 +99,13 @@ def main() -> int:
     parser.add_argument("--allen-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--channel", default="treadmill")
-    parser.add_argument("--offset-v", default="auto")
-    parser.add_argument("--volt-sec-per-rot", type=float, required=True)
-    parser.add_argument("--mm-per-rot", type=float, required=True)
-    parser.add_argument("--smoothing-sigma-s", type=float, default=0.100)
-    parser.add_argument("--thresh-speed", type=float, default=10.0)
-    parser.add_argument("--max-gap-duration", type=float, default=0.250)
-    parser.add_argument("--min-duration", type=float, default=0.500)
+    parser.add_argument("--offset-v", default=str(DEFAULT_OFFSET_V))
+    parser.add_argument("--volt-sec-per-rot", type=float, default=DEFAULT_VOLT_SEC_PER_ROT)
+    parser.add_argument("--mm-per-rot", type=float, default=DEFAULT_MM_PER_ROT)
+    parser.add_argument("--smoothing-sigma-s", type=float, default=DEFAULT_SMOOTHING_SIGMA_S)
+    parser.add_argument("--thresh-speed", type=float, default=DEFAULT_THRESH_SPEED_MM_S)
+    parser.add_argument("--max-gap-duration", type=float, default=DEFAULT_MAX_GAP_DURATION_S)
+    parser.add_argument("--min-duration", type=float, default=DEFAULT_MIN_DURATION_S)
     parser.add_argument("--frame-margin-s", type=float, default=0.0)
     parser.add_argument("--percentile", type=float, default=99.0)
     args = parser.parse_args()
@@ -140,10 +149,41 @@ def main() -> int:
     frame_not_running = valid & ~frame_running
 
     if frame_running.sum() == 0 or frame_not_running.sum() == 0:
-        raise ValueError(
-            f"Need both running and not-running frames; got running={int(frame_running.sum())}, "
-            f"not_running={int(frame_not_running.sum())}."
-        )
+        starts, stops = bout_edges(running)
+        durations_s = (stops - starts) / sample_rate_hz
+        summary = {
+            "label": args.label,
+            "daq_h5": str(args.daq_h5),
+            "wfield_results": str(args.wfield_results),
+            "allen_dir": str(args.allen_dir),
+            "channel": args.channel,
+            "offset_v": offset_v,
+            "offset_source": offset_source,
+            "volt_sec_per_rot": args.volt_sec_per_rot,
+            "mm_per_rot": args.mm_per_rot,
+            "smoothing_sigma_s": args.smoothing_sigma_s,
+            "thresh_speed": args.thresh_speed,
+            "max_gap_duration": args.max_gap_duration,
+            "min_duration": args.min_duration,
+            "frame_margin_s": args.frame_margin_s,
+            "daq_pco_exposure_count": int(pco_samples.size),
+            "svt_corrected_frame_count": int(SVTcorr.shape[1]),
+            "valid_corrected_frame_count": int(valid.sum()),
+            "running_corrected_frame_count": int(frame_running.sum()),
+            "not_running_corrected_frame_count": int(frame_not_running.sum()),
+            "n_running_bouts": int(starts.size),
+            "running_bout_duration_s_median": float(np.median(durations_s)) if durations_s.size else None,
+            "running_bout_duration_s_max": float(np.max(durations_s)) if durations_s.size else None,
+            "skipped": True,
+            "skip_reason": (
+                "Need both running and not-running imaging frames; "
+                f"got running={int(frame_running.sum())}, not_running={int(frame_not_running.sum())}."
+            ),
+        }
+        summary_path = args.output / f"{args.label}_running_vs_not_running_activity_summary.json"
+        summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        print(json.dumps(summary, indent=2), flush=True)
+        return 0
 
     running_svt = np.asarray(SVTcorr[:, frame_running]).mean(axis=1)
     not_running_svt = np.asarray(SVTcorr[:, frame_not_running]).mean(axis=1)
