@@ -74,7 +74,7 @@ Diagnostics and utilities:
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
 - `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
-- `wfield_ncaas_fixed.py` - launcher for `wfield ncaas` that patches a PyQt progress-bar type issue seen during NeuroCAAS uploads.
+- `wfield_local/` - local widefield processing helpers for motion correction, SVD/hemodynamic correction, Allen alignment, cue/lick-aligned plots, alignment diagnostics, and NeuroCAAS compatibility launch.
 - `requirements.txt` - Python package dependencies.
 - `.gitignore` - excludes HDF5 recordings, Python caches, logs, and local environment folders.
 
@@ -135,16 +135,29 @@ If `wfield ncaas` crashes during upload with `QProgressBar.setValue` receiving a
 ```powershell
 conda activate wfield
 cd "C:\Github\Widefield_DAQ_recorder"
-python .\wfield_ncaas_fixed.py
+python .\wfield_local\wfield_ncaas_fixed.py
 ```
 
 To start in a specific recording folder:
 
 ```powershell
-python .\wfield_ncaas_fixed.py "E:\labcams_data\20260601\PS94_20260601_141614"
+python .\wfield_local\wfield_ncaas_fixed.py "E:\labcams_data\20260601\PS94_20260601_141614"
 ```
 
 The wrapper does not modify the installed `wfield` package. It only coerces PyQt progress-bar values to plain Python integers in that launched process.
+
+## Local wfield Processing
+
+See [wfield_local/README.md](wfield_local/README.md) for local processing instructions covering:
+
+- motion correction
+- SVD and dual-color hemodynamic correction
+- Allen landmark alignment
+- cue-aligned spout-position maps
+- shared-scale figure regeneration
+- alignment diagnostics and comparison PowerPoints
+- post-lick 150 ms maps by spout position
+- imported sync-pulse and hysteresis lick-detection helpers from the stroke/orofacial workflow
 
 ## Timing Notes
 
