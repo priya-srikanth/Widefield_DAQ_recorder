@@ -173,6 +173,7 @@ def main() -> int:
     parser.add_argument("--allen-dir", type=Path, required=True)
     parser.add_argument("--camlog", type=Path, default=None)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--label", default="PS94")
     parser.add_argument("--pre-s", type=float, default=1.0)
     parser.add_argument("--post-s", type=float, default=1.0)
     parser.add_argument("--fs", type=float, default=31.23)
@@ -263,10 +264,10 @@ def main() -> int:
         fig.colorbar(im, ax=axes[row, :], shrink=0.7, pad=0.01)
 
     fig.suptitle(
-        "PS94 motion-corrected, hemodynamic-corrected cue averages with Allen region outlines",
+        f"{args.label} motion-corrected, hemodynamic-corrected cue averages with Allen region outlines",
         fontsize=14,
     )
-    png = args.output / "PS94_spout_positions_1s_pre_post_delta_allen_overlay.png"
+    png = args.output / f"{args.label}_spout_positions_1s_pre_post_delta_allen_overlay.png"
     fig.savefig(png, dpi=180)
     plt.close(fig)
 
@@ -274,7 +275,10 @@ def main() -> int:
     for name, vals in maps.items():
         for key, arr in vals.items():
             npz_payload[f"{name}_{key}"] = arr
-    np.savez_compressed(args.output / "PS94_spout_positions_1s_pre_post_delta_maps.npz", **npz_payload)
+    np.savez_compressed(
+        args.output / f"{args.label}_spout_positions_1s_pre_post_delta_maps.npz",
+        **npz_payload,
+    )
 
     summary = {
         "daq_h5": str(args.daq_h5),
@@ -294,7 +298,7 @@ def main() -> int:
         "classification": "Most recent spout_strobe before cue; code = bit0 + 2*bit1 + 4*bit2 sampled at strobe rising edge.",
         "frame_mapping": frame_mapping,
     }
-    (args.output / "PS94_spout_positions_1s_pre_post_delta_summary.json").write_text(
+    (args.output / f"{args.label}_spout_positions_1s_pre_post_delta_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )
     print(json.dumps(summary, indent=2), flush=True)
