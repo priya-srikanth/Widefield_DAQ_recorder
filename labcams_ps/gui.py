@@ -192,6 +192,31 @@ def _patch_pco_hwio4_status_expos() -> None:
 _ORIGINAL_CAMSTIM_PROCESS_MESSAGE = None
 
 
+def _patch_pyqtgraph_nan_downsample() -> None:
+    """Avoid noisy non-fatal ImageItem NaN downsample tracebacks on startup."""
+
+    try:
+        from pyqtgraph.graphicsItems.ImageItem import ImageItem
+    except Exception:
+        return
+
+    if getattr(ImageItem, "_ps_nan_downsample_patch", False):
+        return
+
+    original_compute = ImageItem._computeDownsampleFactors
+
+    def compute_downsample_factors_without_nan_traceback(self):
+        try:
+            return original_compute(self)
+        except ValueError as err:
+            if "cannot convert float NaN to integer" in str(err):
+                return 1, 1
+            raise
+
+    ImageItem._computeDownsampleFactors = compute_downsample_factors_without_nan_traceback
+    ImageItem._ps_nan_downsample_patch = True
+
+
 def _patch_camstim_trial_messages() -> None:
     """Log trial start/stop messages from the trial-gated Teensy firmware."""
 
@@ -216,6 +241,11 @@ def _patch_camstim_trial_messages() -> None:
                     frame = int(parts[2])
                     t_ms = float(parts[3])
                     name = "start" if code == 1 else "stop" if code == 2 else "unknown"
+                    _display(
+                        "[labcams_ps] Teensy trial {0} acknowledged at frame {1}, t={2} ms".format(
+                            name, frame, t_ms
+                        )
+                    )
                     return ["#TRIAL:{0},{1},{2},{3}".format(name, code, frame, t_ms)]
             if stripped and stripped[0] == "G":
                 parts = stripped.split(cam_stim_trigger.SEP)
@@ -841,6 +871,7 @@ def _patch_gui_docks() -> None:
 def apply_patches() -> None:
     """Patch upstream labcams in memory for this process only."""
 
+    _patch_pyqtgraph_nan_downsample()
     _patch_offline_pco()
     _patch_pco_hwio4_status_expos()
     _patch_camstim_trial_messages()
