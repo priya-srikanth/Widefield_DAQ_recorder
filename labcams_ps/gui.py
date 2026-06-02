@@ -258,10 +258,17 @@ def _patch_gui_docks() -> None:
                 _display("[labcams_ps] WARNING: Could not stop old writer cleanly: {0}".format(err))
 
             try:
+                writer_params = dict(cam.recorder_parameters)
+                writer_params["datafolder"] = folder
+                # labcams.io.GenericWriter creates path_keys["recorder_path"]
+                # internally from datafolder. Passing recorder_path again through
+                # **kwargs raises "multiple values for keyword argument".
+                writer_params.pop("recorder_path", None)
+                writer_params.pop("virtual_channels", None)
                 cam.writer = writer_class(
                     cam=cam.cam,
                     virtual_channels=virtual_channels,
-                    **cam.recorder_parameters,
+                    **writer_params,
                 )
                 cam.writer.datafolder = folder
                 cam.writer.path_keys["datafolder"] = folder
