@@ -23,7 +23,7 @@
 // labcams CamStimInterface-compatible protocol:
 //   @Q -> @Q_NCHANNELS_2_MODES_415nm:470nm:both
 //   @C -> @C_1 or @C_2
-//   @M_<mode>, @N, @S
+//   @M_<mode>, @G_<0_or_1>, @N, @S
 
 const byte PIN_TRIAL_START = 20;
 const byte PIN_TRIAL_STOP  = 22;
@@ -53,11 +53,15 @@ const uint32_t CAMERA_TRIGGER_US = 1000;  // frame-start trigger pulse width
 #define FRAME           'F'
 #define SYNC            'T'
 #define SET_MODE        'M'
+#define SET_TRIAL_GATE  'G'
 #define TRIAL_EVENT     'R'
 
 volatile uint8_t mode = 3;       // 1: 415, 2: 470, 3: alternate
 volatile uint8_t armed = 0;      // labcams says stimulation/camera control allowed
 volatile uint8_t trial_active = 0;
+volatile uint8_t trial_gated = 0; // 0: preview/free-run while armed, 1: require trial_start/stop
+volatile uint8_t last_trial_start_state = LOW;
+volatile uint8_t last_trial_stop_state = LOW;
 
 volatile uint32_t pulse_count = 0;
 volatile uint32_t last_pulse_count = 0;
@@ -103,6 +107,7 @@ void all_outputs_low() {
 
 void trial_start_received() {
   if (digitalReadFast(PIN_TRIAL_START) == HIGH) {
+    last_trial_start_state = HIGH;
     trial_active = 1;
     next_frame_us = micros();
     last_trial_code = 1;
@@ -113,6 +118,7 @@ void trial_start_received() {
 
 void trial_stop_received() {
   if (digitalReadFast(PIN_TRIAL_STOP) == HIGH) {
+    last_trial_stop_state = HIGH;
     trial_active = 0;
     all_outputs_low();
     last_trial_code = 2;
@@ -132,7 +138,7 @@ void sync_received() {
 void exposure_status_changed() {
   if (digitalReadFast(PIN_PCO_STATUS_EXPOS) == HIGH) {
     led_gate_high = 1;
-    if (armed && trial_active && pending_led_pin != 0) {
+    if (armed && (!trial_gated || trial_active) && pending_led_pin != 0) {
       active_led_pin = pending_led_pin;
       digitalWriteFast(PIN_LED0_TRIGGER, LOW);
       digitalWriteFast(PIN_LED1_TRIGGER, LOW);
@@ -144,6 +150,21 @@ void exposure_status_changed() {
     digitalWriteFast(PIN_LED1_TRIGGER, LOW);
     active_led_pin = 0;
   }
+}
+
+void poll_trial_inputs() {
+  uint8_t start_state = digitalReadFast(PIN_TRIAL_START);
+  uint8_t stop_state = digitalReadFast(PIN_TRIAL_STOP);
+
+  if (start_state == HIGH && last_trial_start_state == LOW) {
+    trial_start_received();
+  }
+  if (stop_state == HIGH && last_trial_stop_state == LOW) {
+    trial_stop_received();
+  }
+
+  last_trial_start_state = start_state;
+  last_trial_stop_state = stop_state;
 }
 
 byte led_for_next_frame() {
@@ -161,7 +182,7 @@ byte led_for_next_frame() {
 
 void trigger_frame_if_due() {
   uint32_t now = micros();
-  if (armed && trial_active && (int32_t)(now - next_frame_us) >= 0) {
+  if (armed && (!trial_gated || trial_active) && (int32_t)(now - next_frame_us) >= 0) {
     pulse_count++;
     digitalWriteFast(PIN_LED0_TRIGGER, LOW);
     digitalWriteFast(PIN_LED1_TRIGGER, LOW);
@@ -207,6 +228,8 @@ void setup() {
 
   start_time_ms = millis();
   next_frame_us = micros();
+  last_trial_start_state = digitalReadFast(PIN_TRIAL_START);
+  last_trial_stop_state = digitalReadFast(PIN_TRIAL_STOP);
 }
 
 void report_events() {
@@ -248,6 +271,7 @@ void report_events() {
 }
 
 void loop() {
+  poll_trial_inputs();
   trigger_frame_if_due();
   report_events();
   serialEvent();
@@ -276,7 +300,7 @@ void serialEvent() {
             last_sync_ms = -1;
             last_frame_ms = -1;
             last_trial_ms = -1;
-            trial_active = 0;  // wait for behavior trial_start pin
+            trial_active = trial_gated ? 0 : 1;
             next_frame_us = micros();
             armed = 1;
             reply += START_LEDS;
@@ -309,6 +333,18 @@ void serialEvent() {
             reply += SET_MODE;
             Serial.print(reply); Serial.print(SEP);
             Serial.print(mode); Serial.print(ETX);
+            break;
+
+          case SET_TRIAL_GATE:
+            token = strtok(msg, SEP);
+            token = strtok(NULL, SEP);
+            trial_gated = token ? (atoi(token) ? 1 : 0) : 0;
+            trial_active = trial_gated ? 0 : 1;
+            all_outputs_low();
+            next_frame_us = micros();
+            reply += SET_TRIAL_GATE;
+            Serial.print(reply); Serial.print(SEP);
+            Serial.print((int)trial_gated); Serial.print(ETX);
             break;
 
           case QUERY_NCHANNELS:

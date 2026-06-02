@@ -217,6 +217,12 @@ def _patch_camstim_trial_messages() -> None:
                     t_ms = float(parts[3])
                     name = "start" if code == 1 else "stop" if code == 2 else "unknown"
                     return ["#TRIAL:{0},{1},{2},{3}".format(name, code, frame, t_ms)]
+            if stripped and stripped[0] == "G":
+                parts = stripped.split(cam_stim_trigger.SEP)
+                if len(parts) >= 2:
+                    state = "on" if int(parts[1]) else "off"
+                    _display("[labcams_ps] Teensy trial-triggered mode acknowledged: {0}".format(state))
+                return None
         return _ORIGINAL_CAMSTIM_PROCESS_MESSAGE(self, tread, msg)
 
     cam_stim_trigger.CamStimInterface.process_message = process_message_with_trials
@@ -229,6 +235,7 @@ def _patch_gui_docks() -> None:
     from PyQt5.QtCore import QTimer, Qt
     from PyQt5.QtWidgets import (
         QFileDialog,
+        QCheckBox,
         QComboBox,
         QDockWidget,
         QHBoxLayout,
@@ -433,6 +440,10 @@ def _patch_gui_docks() -> None:
         info.setWordWrap(True)
         layout.addWidget(info)
 
+        trial_triggered = QCheckBox("Trial-triggered")
+        trial_triggered.setToolTip("When checked, Teensy waits for behavior trial_start/trial_stop. When unchecked, Preview can run continuously while armed.")
+        layout.addWidget(trial_triggered)
+
         mode_row = QHBoxLayout()
         mode_combo = QComboBox()
         mode_combo.addItem("Violet / 415 nm", 1)
@@ -454,6 +465,16 @@ def _patch_gui_docks() -> None:
         status.setWordWrap(True)
         layout.addWidget(status)
 
+        def set_trial_triggered(enabled):
+            try:
+                trigger.inQ.put("G_{0}".format(1 if enabled else 0))
+                state = "on" if enabled else "off"
+                status.setText("Trial-triggered: {0}".format(state))
+                _display("[labcams_ps] Trial-triggered acquisition {0}".format(state))
+            except Exception as err:
+                status.setText("Could not set trial-triggered mode: {0}".format(err))
+                _display("[labcams_ps] WARNING: Could not set trial-triggered mode: {0}".format(err))
+
         def apply_mode(index):
             if index < 0:
                 return
@@ -473,9 +494,11 @@ def _patch_gui_docks() -> None:
             _display("[labcams_ps] LED trigger disarmed")
 
         mode_combo.currentIndexChanged.connect(apply_mode)
+        trial_triggered.toggled.connect(set_trial_triggered)
         arm_button.clicked.connect(arm_leds)
         disarm_button.clicked.connect(disarm_leds)
         apply_mode(mode_combo.currentIndex())
+        set_trial_triggered(trial_triggered.isChecked())
 
         dock.setWidget(widget)
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)

@@ -141,7 +141,9 @@ For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial
 - Teensy pin 6 -> 470 nm/blue LED TTL input
 - optional Teensy pin 7 -> DAQ if you want a direct copy of the generated frame trigger
 
-The trial-gated config asks the wrapper to set the PCO trigger mode to external exposure start. Pin 18 sends short frame-start pulses during each trial; it should not be held high continuously. PCO SMA output #4 should be configured in Camware as `Status Exposure`, `Show common time of 'All lines'`, `On`, `High`. LEDs only turn on while Status Expos is high, so `Arm LEDs`/`Preview` alone will not illuminate LEDs unless a trial-start signal is present and the camera is returning exposure-status pulses.
+The trial-gated config asks the wrapper to set the PCO trigger mode to external exposure start. Pin 18 sends short frame-start pulses; it should not be held high continuously. PCO SMA output #4 should be configured in Camware as `Status Exposure`, `Show common time of 'All lines'`, `On`, `High`.
+
+The `LED Control` dock has a `Trial-triggered` checkbox. Leave it unchecked for alignment/preview: when armed, the Teensy free-runs camera trigger pulses and the PCO Status Expos line gates the selected LED. Check it immediately before the behavior task: the Teensy then waits for behavior `trial_start` on pin 20 and stops frame triggers/LED gates on behavior `trial_stop` on pin 22.
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
