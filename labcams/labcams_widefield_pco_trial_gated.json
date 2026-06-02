@@ -1,26 +1,32 @@
 {
-  "cams": [
-    {
-      "driver": "PCO",
-      "cam_id": 1,
-      "name": "pco_edge",
-      "exposure": 16,
-      "binning": 4,
-      "acquire_mode": "auto",
-      "trigger_mode": "external exposure start & software trigger",
-      "recorder": {
-        "format": "binary",
-        "subfolder": "raw_widefield_data",
-        "frames_per_file": 0
-      },
-      "excitation_trigger": {
-        "port": "COM4"
-      },
-      "allow_missing_camera": true
-    }
-  ],
-  "recorder_path": "C:\\Data\\labcams_data",
-  "recorder_path_format": "{recorder_path}\\{filename}\\{subfolder}\\{dataname}_{run}_{nfiles}",
-  "server": "udp",
-  "server_port": 9999
+    "cams":  [
+                 {
+                     "driver":  "PCO",
+                     "cam_id":  1,
+                     "name":  "pco_edge",
+                     "exposure":  16,
+                     "binning":  4,
+                     "acquire_mode":  "external",
+                     "trigger_mode":  "auto sequence",
+                     "recorder":  {
+                                      "format":  "binary",
+                                      "subfolder":  "raw_widefield_data",
+                                      "frames_per_file":  0
+                                  },
+                     "excitation_trigger":  {
+                                                "port":  "COM4"
+                                            },
+                     "allow_missing_camera":  true,
+                     "roi":  [
+                                 75,
+                                 30,
+                                 547,
+                                 516
+                             ]
+                 }
+             ],
+    "recorder_path":  "C:\\Data\\labcams_data",
+    "recorder_path_format":  "{recorder_path}\\{filename}\\{subfolder}\\{dataname}_{run}_{nfiles}",
+    "server":  "udp",
+    "server_port":  9999
 }

@@ -1,24 +1,23 @@
 // Trial-gated widefield Teensy firmware.
 //
 // Behavior trial_start from behavior Arduino pin 6 into Teensy pin 20
-// enables camera-trigger pulses.
+// enables camera acquisition.
 // Behavior trial_stop from behavior Arduino pin 9 into Teensy pin 19
-// disables camera-trigger pulses and LED gates.
+// disables camera acquisition and LED gates.
 //
 // Wiring expectation:
 //   pin 20: behavior trial_start TTL input, from behavior Arduino pin 6
 //   pin 19: behavior trial_stop TTL input, from behavior Arduino pin 9
-//   pin 18: Teensy camera trigger TTL output -> PCO SMA input #1
+//   pin 18: Teensy acquire-enable TTL output -> PCO SMA input #2
 //   pin  3: PCO SMA output #4 Status Expos input -> gates LEDs during exposure
 //   pin  5: 415 nm/violet LED TTL output
 //   pin  6: 470 nm/blue LED TTL output
-//   pin  7: optional frame/trigger mirror to DAQ
+//   pin  7: optional acquire-enable mirror to DAQ
 //   pin  4: optional global sync TTL input, logged as @T/#SYNC
 //
-// PCO must be configured for external trigger/frame-start mode for pin 18 to
-// control exposure. PCO SMA output #4 should be configured as Status Expos,
-// "Show common time of All lines", high polarity. LEDs turn on only while that
-// status line is high.
+// PCO should be configured with Acquire Enable enabled/high on SMA input #2.
+// PCO SMA output #4 should be configured as Status Expos, "Show common time
+// of All lines", high polarity. LEDs turn on only while that status line is high.
 //
 // labcams CamStimInterface-compatible protocol:
 //   @Q -> @Q_NCHANNELS_2_MODES_415nm:470nm:both
@@ -26,20 +25,16 @@
 //   @M_<mode>, @G_<0_or_1>, @D_<max_trial_ms>, @N, @S
 
 const byte PIN_TRIAL_START = 20;
-const byte PIN_TRIAL_STOP  = 19;
+const byte PIN_TRIAL_STOP = 19;
 const byte PIN_PCO_STATUS_EXPOS = 3;
 const byte PIN_GLOBAL_SYNC = 4;
 
-const byte PIN_PCO_TRIGGER = 18;
+const byte PIN_PCO_ACQUIRE_ENABLE = 18;
 const byte PIN_LED0_TRIGGER = 5;  // 415 nm/violet
 const byte PIN_LED1_TRIGGER = 6;  // 470 nm/blue
-const byte PIN_GPIO = 7;          // optional trigger mirror to DAQ
+const byte PIN_GPIO = 7;          // optional acquire-enable mirror to DAQ
 
-#define GPIO_MIMIC_TRIGGER
-
-// Timing. Keep camera trigger pulse short. LEDs are gated by PCO Status Expos.
-const uint32_t FRAME_PERIOD_US = 16000;   // 62.5 Hz raw camera trigger rate
-const uint32_t CAMERA_TRIGGER_US = 1000;  // frame-start trigger pulse width
+#define GPIO_MIMIC_ACQUIRE_ENABLE
 
 #define STX '@'
 #define ETX '\n'
@@ -58,7 +53,7 @@ const uint32_t CAMERA_TRIGGER_US = 1000;  // frame-start trigger pulse width
 #define TRIAL_EVENT     'R'
 
 volatile uint8_t mode = 3;       // 1: 415, 2: 470, 3: alternate
-volatile uint8_t armed = 0;      // labcams says stimulation/camera control allowed
+volatile uint8_t armed = 0;      // labcams says camera/LED control allowed
 volatile uint8_t trial_active = 0;
 volatile uint8_t trial_gated = 0; // 0: preview/free-run while armed, 1: require trial_start/stop
 volatile uint8_t last_trial_start_state = LOW;
@@ -66,8 +61,8 @@ volatile uint8_t last_trial_stop_state = LOW;
 volatile uint32_t trial_start_ms = 0;
 volatile uint32_t max_trial_ms = 5000; // safety stop if trial_stop TTL is missed; 0 disables
 
-volatile uint32_t pulse_count = 0;
-volatile uint32_t last_pulse_count = 0;
+volatile uint32_t frame_count = 0;
+volatile uint32_t last_frame_count = 0;
 volatile int32_t last_frame_ms = -1;
 volatile byte last_led_pin = 0;
 volatile byte pending_led_pin = 0;
@@ -76,15 +71,12 @@ volatile uint32_t sync_count = 0;
 volatile uint32_t sync_frame_count = 0;
 volatile int32_t last_sync_ms = -1;
 
-volatile uint8_t last_trial_code = 0;  // 1=start, 2=stop
+volatile uint8_t last_trial_code = 0;  // 1=start, 2=stop, 3=safety timeout
 volatile uint32_t last_trial_frame = 0;
 volatile int32_t last_trial_ms = -1;
 
 uint32_t start_time_ms = 0;
-uint32_t next_frame_us = 0;
-uint32_t camera_low_us = 0;
 byte active_led_pin = 0;
-uint8_t camera_pulse_high = 0;
 volatile uint8_t led_gate_high = 0;
 
 #define MSGSIZE 64
@@ -95,17 +87,45 @@ int32_t elapsed_ms() {
   return (int32_t)(millis() - start_time_ms);
 }
 
+uint8_t acquisition_should_be_enabled() {
+  return armed && (!trial_gated || trial_active);
+}
+
+byte led_for_next_frame() {
+  switch (mode) {
+    case 1:
+      return PIN_LED0_TRIGGER;
+    case 2:
+      return PIN_LED1_TRIGGER;
+    case 3:
+      return ((frame_count % 2) == 0) ? PIN_LED1_TRIGGER : PIN_LED0_TRIGGER;
+    default:
+      return PIN_LED0_TRIGGER;
+  }
+}
+
+void set_acquire_enabled(uint8_t enabled) {
+  digitalWriteFast(PIN_PCO_ACQUIRE_ENABLE, enabled ? HIGH : LOW);
+#ifdef GPIO_MIMIC_ACQUIRE_ENABLE
+  digitalWriteFast(PIN_GPIO, enabled ? HIGH : LOW);
+#endif
+}
+
 void all_outputs_low() {
-  digitalWriteFast(PIN_PCO_TRIGGER, LOW);
+  set_acquire_enabled(0);
   digitalWriteFast(PIN_LED0_TRIGGER, LOW);
   digitalWriteFast(PIN_LED1_TRIGGER, LOW);
-#ifdef GPIO_MIMIC_TRIGGER
-  digitalWriteFast(PIN_GPIO, LOW);
-#endif
-  camera_pulse_high = 0;
   led_gate_high = 0;
   active_led_pin = 0;
   pending_led_pin = 0;
+}
+
+void note_frame_start_from_exposure() {
+  frame_count++;
+  pending_led_pin = led_for_next_frame();
+  last_led_pin = pending_led_pin;
+  last_frame_count = frame_count;
+  last_frame_ms = elapsed_ms();
 }
 
 void trial_start_received() {
@@ -113,9 +133,11 @@ void trial_start_received() {
     last_trial_start_state = HIGH;
     trial_active = 1;
     trial_start_ms = millis();
-    next_frame_us = micros();
+    if (armed && trial_gated) {
+      set_acquire_enabled(1);
+    }
     last_trial_code = 1;
-    last_trial_frame = pulse_count;
+    last_trial_frame = frame_count;
     last_trial_ms = elapsed_ms();
   }
 }
@@ -126,7 +148,7 @@ void trial_stop_received() {
     trial_active = 0;
     all_outputs_low();
     last_trial_code = 2;
-    last_trial_frame = pulse_count;
+    last_trial_frame = frame_count;
     last_trial_ms = elapsed_ms();
   }
 }
@@ -134,7 +156,7 @@ void trial_stop_received() {
 void sync_received() {
   if (digitalReadFast(PIN_GLOBAL_SYNC) == HIGH) {
     sync_count++;
-    sync_frame_count = pulse_count;
+    sync_frame_count = frame_count;
     last_sync_ms = elapsed_ms();
   }
 }
@@ -142,7 +164,8 @@ void sync_received() {
 void exposure_status_changed() {
   if (digitalReadFast(PIN_PCO_STATUS_EXPOS) == HIGH) {
     led_gate_high = 1;
-    if (armed && (!trial_gated || trial_active) && pending_led_pin != 0) {
+    if (acquisition_should_be_enabled()) {
+      note_frame_start_from_exposure();
       active_led_pin = pending_led_pin;
       digitalWriteFast(PIN_LED0_TRIGGER, LOW);
       digitalWriteFast(PIN_LED1_TRIGGER, LOW);
@@ -175,52 +198,15 @@ void poll_trial_inputs() {
     if (elapsed >= max_trial_ms) {
       trial_active = 0;
       all_outputs_low();
-      last_trial_code = 3;  // safety timeout
-      last_trial_frame = pulse_count;
+      last_trial_code = 3;
+      last_trial_frame = frame_count;
       last_trial_ms = elapsed_ms();
     }
   }
 }
 
-byte led_for_next_frame() {
-  switch (mode) {
-    case 1:
-      return PIN_LED0_TRIGGER;
-    case 2:
-      return PIN_LED1_TRIGGER;
-    case 3:
-      return ((pulse_count % 2) == 0) ? PIN_LED1_TRIGGER : PIN_LED0_TRIGGER;
-    default:
-      return PIN_LED0_TRIGGER;
-  }
-}
-
-void trigger_frame_if_due() {
-  uint32_t now = micros();
-  if (armed && (!trial_gated || trial_active) && (int32_t)(now - next_frame_us) >= 0) {
-    pulse_count++;
-    digitalWriteFast(PIN_LED0_TRIGGER, LOW);
-    digitalWriteFast(PIN_LED1_TRIGGER, LOW);
-    pending_led_pin = led_for_next_frame();
-
-    digitalWriteFast(PIN_PCO_TRIGGER, HIGH);
-#ifdef GPIO_MIMIC_TRIGGER
-    digitalWriteFast(PIN_GPIO, HIGH);
-#endif
-    camera_pulse_high = 1;
-    camera_low_us = now + CAMERA_TRIGGER_US;
-    next_frame_us += FRAME_PERIOD_US;
-
-    last_led_pin = pending_led_pin;
-    last_pulse_count = pulse_count;
-    last_frame_ms = elapsed_ms();
-  }
-
-  now = micros();
-  if (camera_pulse_high && (int32_t)(now - camera_low_us) >= 0) {
-    digitalWriteFast(PIN_PCO_TRIGGER, LOW);
-    camera_pulse_high = 0;
-  }
+void update_acquire_enable() {
+  set_acquire_enabled(acquisition_should_be_enabled() ? 1 : 0);
 }
 
 void setup() {
@@ -228,7 +214,7 @@ void setup() {
   pinMode(PIN_TRIAL_STOP, INPUT);
   pinMode(PIN_PCO_STATUS_EXPOS, INPUT);
   pinMode(PIN_GLOBAL_SYNC, INPUT);
-  pinMode(PIN_PCO_TRIGGER, OUTPUT);
+  pinMode(PIN_PCO_ACQUIRE_ENABLE, OUTPUT);
   pinMode(PIN_LED0_TRIGGER, OUTPUT);
   pinMode(PIN_LED1_TRIGGER, OUTPUT);
   pinMode(PIN_GPIO, OUTPUT);
@@ -237,12 +223,11 @@ void setup() {
   Serial.begin(2000000);
 
   attachInterrupt(digitalPinToInterrupt(PIN_TRIAL_START), trial_start_received, RISING);
-  attachInterrupt(digitalPinToInterrupt(PIN_TRIAL_STOP),  trial_stop_received,  RISING);
+  attachInterrupt(digitalPinToInterrupt(PIN_TRIAL_STOP), trial_stop_received, RISING);
   attachInterrupt(digitalPinToInterrupt(PIN_PCO_STATUS_EXPOS), exposure_status_changed, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PIN_GLOBAL_SYNC), sync_received,        RISING);
+  attachInterrupt(digitalPinToInterrupt(PIN_GLOBAL_SYNC), sync_received, RISING);
 
   start_time_ms = millis();
-  next_frame_us = micros();
   last_trial_start_state = digitalReadFast(PIN_TRIAL_START);
   last_trial_stop_state = digitalReadFast(PIN_TRIAL_STOP);
 }
@@ -250,7 +235,7 @@ void setup() {
 void report_events() {
   noInterrupts();
   int32_t frame_ms = last_frame_ms;
-  uint32_t frame_count = last_pulse_count;
+  uint32_t frame_number = last_frame_count;
   byte led = last_led_pin;
   int32_t sync_ms = last_sync_ms;
   uint32_t sc = sync_count;
@@ -263,7 +248,7 @@ void report_events() {
   if (frame_ms > 0) {
     Serial.print(STX); Serial.print(FRAME); Serial.print(SEP);
     Serial.print((int)led); Serial.print(SEP);
-    Serial.print(frame_count); Serial.print(SEP);
+    Serial.print(frame_number); Serial.print(SEP);
     Serial.print(frame_ms); Serial.print(ETX);
     noInterrupts(); last_frame_ms = -1; interrupts();
   }
@@ -287,7 +272,7 @@ void report_events() {
 
 void loop() {
   poll_trial_inputs();
-  trigger_frame_if_due();
+  update_acquire_enable();
   report_events();
   serialEvent();
 }
@@ -302,22 +287,27 @@ void serialEvent() {
       cnt++;
 
       if (ch == ETX || cnt >= MSGSIZE) {
+        if (cnt >= MSGSIZE) {
+          msg[MSGSIZE - 1] = '\0';
+        } else {
+          msg[cnt] = '\0';
+        }
         cnt = 0;
         String reply = String(STX);
 
         switch (msg[1]) {
           case START_LEDS:
             start_time_ms = millis();
-            pulse_count = 0;
-            last_pulse_count = 0;
+            frame_count = 0;
+            last_frame_count = 0;
             sync_frame_count = 0;
             sync_count = 0;
             last_sync_ms = -1;
             last_frame_ms = -1;
             last_trial_ms = -1;
             trial_active = trial_gated ? 0 : 1;
-            next_frame_us = micros();
             armed = 1;
+            update_acquire_enable();
             reply += START_LEDS;
             Serial.print(reply); Serial.print(SEP);
             Serial.print(elapsed_ms()); Serial.print(ETX);
@@ -356,7 +346,7 @@ void serialEvent() {
             trial_gated = token ? (atoi(token) ? 1 : 0) : 0;
             trial_active = trial_gated ? 0 : 1;
             all_outputs_low();
-            next_frame_us = micros();
+            update_acquire_enable();
             reply += SET_TRIAL_GATE;
             Serial.print(reply); Serial.print(SEP);
             Serial.print((int)trial_gated); Serial.print(ETX);
