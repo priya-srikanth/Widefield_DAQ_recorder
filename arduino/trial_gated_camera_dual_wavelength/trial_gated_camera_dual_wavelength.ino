@@ -1,12 +1,13 @@
 // Trial-gated widefield Teensy firmware.
 //
-// Behavior trial_start from behavior Arduino2 pin 9 into Teensy pin 20
+// Behavior trial_start from behavior Arduino pin 6 into Teensy pin 20
 // enables camera-trigger and LED pulses.
-// Behavior trial_stop into Teensy pin 22 disables camera-trigger and LED pulses.
+// Behavior trial_stop from behavior Arduino pin 9 into Teensy pin 22
+// disables camera-trigger and LED pulses.
 //
 // Wiring expectation:
-//   pin 20: behavior trial_start TTL input, from behavior Arduino2 pin 9
-//   pin 22: behavior trial_stop TTL input
+//   pin 20: behavior trial_start TTL input, from behavior Arduino pin 6
+//   pin 22: behavior trial_stop TTL input, from behavior Arduino pin 9
 //   pin  9: Teensy camera trigger TTL output -> PCO external trigger input
 //   pin  5: 415 nm/violet LED TTL output
 //   pin  6: 470 nm/blue LED TTL output

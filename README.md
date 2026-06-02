@@ -133,8 +133,8 @@ cd "C:\Github\Widefield_DAQ_recorder"
 
 For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` to the labcams Teensy and wire:
 
-- behavior Arduino2 pin 9 `trial_start` TTL -> Teensy pin 20
-- behavior `trial_stop` TTL -> Teensy pin 22
+- behavior Arduino pin 6 `trial_start` TTL -> Teensy pin 20
+- behavior Arduino pin 9 `trial_stop` TTL -> Teensy pin 22
 - Teensy pin 9 -> PCO external trigger input
 - Teensy pin 5 -> 415 nm/violet LED TTL input
 - Teensy pin 6 -> 470 nm/blue LED TTL input
