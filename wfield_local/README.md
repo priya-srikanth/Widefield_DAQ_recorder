@@ -96,6 +96,13 @@ Important note:
 
 ## 4. Cue-Aligned Spout-Position Averages
 
+By default, DAQ events are aligned to imaging frames using the DAQ-recorded
+`pco_exposure` rising edges. This is more robust than wall-clock timestamps:
+the cue sample is mapped to the nearest PCO exposure pulse index, then divided
+by two because each 415/470 raw frame pair becomes one hemodynamic-corrected
+timepoint in `SVTcorr.npy`. Passing `--camlog` is still useful because the
+summary JSON records frame-count QC against the labcams camlog.
+
 Example:
 
 ```powershell
@@ -106,6 +113,7 @@ python .\wfield_local\plot_spout_trial_averages.py `
   --allen-dir "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\wfield_local_results\allen_aligned_v6" `
   --camlog "E:\labcams_data\20260601\PS95_20260601_153653\pco_edge_run000_00000000.camlog" `
   --output "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\spout_trial_averages_allen_v6" `
+  --frame-align pco `
   --pre-s 1.0 `
   --post-s 1.0 `
   --fs 31.23
@@ -116,6 +124,7 @@ Adjustable parameters:
 - `--pre-s`: seconds before cue.
 - `--post-s`: seconds after cue.
 - `--fs`: hemodynamic-corrected paired-frame sampling rate. For PS94/PS95 this was `31.23`.
+- `--frame-align pco`: use DAQ `pco_exposure` pulse order. Use `camlog` only for legacy wall-clock reproduction.
 - `--activity-percentile`: display scaling percentile for pre/post panels.
 
 Spout position is assigned using the most recent `spout_strobe` before each cue:
@@ -194,6 +203,11 @@ This uses local PowerPoint COM automation. PowerPoint must be installed on the m
 
 Post-lick averages use analog `lick_analog` falling threshold crossings. No pre-lick baseline is used by default, because lick bouts can make pre-lick windows hard to interpret.
 
+Like cue-aligned maps, lick events default to `--frame-align pco`, so lick
+sample indices are mapped through DAQ-recorded PCO exposure pulses rather than
+labcams wall-clock timestamps. The optional `--camlog` path adds frame-count QC
+to the output summary.
+
 Example:
 
 ```powershell
@@ -204,7 +218,9 @@ python .\wfield_local\plot_lick_aligned_averages.py `
   --allen-dir "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\wfield_local_results\allen_aligned_v6" `
   --camlog "E:\labcams_data\20260601\PS95_20260601_153653\pco_edge_run000_00000000.camlog" `
   --output "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\lick_aligned_v6" `
-  --lick-threshold-v 2.5 `
+  --frame-align pco `
+  --lick-thresh-upper-v 2.5 `
+  --lick-thresh-lower-v 1.0 `
   --refractory-s 0.10 `
   --post-s 0.150 `
   --fs 31.23
@@ -212,7 +228,8 @@ python .\wfield_local\plot_lick_aligned_averages.py `
 
 Adjustable parameters:
 
-- `--lick-threshold-v`: falling threshold for lick detection. For PS95, licks dropped from ~5.5 V to ~0 V, so `2.5` V is a reasonable default.
+- `--lick-thresh-upper-v`: lick onset threshold. For PS95, licks dropped from ~5.5 V to ~0 V, so `2.5` V is a reasonable default.
+- `--lick-thresh-lower-v`: lick offset threshold for hysteresis. `1.0` V has been used for PS94/PS95.
 - `--refractory-s`: minimum separation between lick events. `0.10` s avoids counting one lick as many threshold crossings.
 - `--post-s`: post-lick window duration. `0.150` s was requested for PS95.
 - `--fs`: paired-frame hemodynamic-corrected sampling rate.

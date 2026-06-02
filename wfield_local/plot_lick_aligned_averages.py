@@ -132,6 +132,48 @@ def _load_camlog_frame_times(camlog: Path) -> tuple[np.ndarray, datetime]:
     return np.array([(t - t0).total_seconds() for t in times], dtype=np.float64), t0
 
 
+def _event_frame_indices_from_pco(event_samples: np.ndarray, pco_samples: np.ndarray) -> np.ndarray:
+    """Map DAQ event samples to raw camera frame indices using DAQ PCO exposure pulses."""
+    if pco_samples.size < 2:
+        raise ValueError("Need at least two DAQ pco_exposure pulses for pulse-order frame alignment.")
+    insertion = np.searchsorted(pco_samples, event_samples, side="left")
+    insertion = np.clip(insertion, 1, len(pco_samples) - 1)
+    prev_dist = np.abs(event_samples - pco_samples[insertion - 1])
+    next_dist = np.abs(pco_samples[insertion] - event_samples)
+    return np.where(prev_dist <= next_dist, insertion - 1, insertion).astype(np.int64)
+
+
+def _frame_qc(
+    pco_samples: np.ndarray,
+    svt_frame_count: int,
+    camlog: Path | None,
+    raw_event_frames: np.ndarray,
+) -> dict:
+    camlog_frame_count = None
+    if camlog is not None:
+        try:
+            camlog_frame_count = int(len(_load_camlog_frame_times(camlog)[0]))
+        except Exception as exc:
+            camlog_frame_count = f"error: {exc}"
+    expected_raw_from_svt = int(svt_frame_count * 2)
+    pco_count = int(len(pco_samples))
+    qc = {
+        "alignment_mode_note": "Primary frame mapping should use DAQ pco_exposure pulse order when available.",
+        "daq_pco_exposure_count": pco_count,
+        "camlog_frame_count": camlog_frame_count,
+        "svt_corrected_frame_count": int(svt_frame_count),
+        "expected_raw_frames_from_svt_pairs": expected_raw_from_svt,
+        "daq_pco_minus_expected_raw_frames": int(pco_count - expected_raw_from_svt),
+        "raw_event_frame_min": int(np.min(raw_event_frames)) if raw_event_frames.size else None,
+        "raw_event_frame_max": int(np.max(raw_event_frames)) if raw_event_frames.size else None,
+        "corrected_event_frame_min": int(np.min(raw_event_frames // 2)) if raw_event_frames.size else None,
+        "corrected_event_frame_max": int(np.max(raw_event_frames // 2)) if raw_event_frames.size else None,
+    }
+    if isinstance(camlog_frame_count, int):
+        qc["daq_pco_minus_camlog_frames"] = int(pco_count - camlog_frame_count)
+    return qc
+
+
 def _event_frame_indices_from_camlog(
     event_samples: np.ndarray,
     sample_rate_hz: float,
@@ -197,7 +239,7 @@ def main() -> int:
     parser.add_argument("--daq-h5", type=Path, required=True)
     parser.add_argument("--wfield-results", type=Path, required=True)
     parser.add_argument("--allen-dir", type=Path, required=True)
-    parser.add_argument("--camlog", type=Path, required=True)
+    parser.add_argument("--camlog", type=Path, default=None)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--label", default="PS95")
     parser.add_argument("--lick-channel", default="lick_analog")
@@ -207,6 +249,12 @@ def main() -> int:
     parser.add_argument("--refractory-s", type=float, default=0.10)
     parser.add_argument("--post-s", type=float, default=0.150)
     parser.add_argument("--fs", type=float, default=31.23)
+    parser.add_argument(
+        "--frame-align",
+        choices=("pco", "camlog"),
+        default="pco",
+        help="Map DAQ licks to imaging frames by DAQ pco_exposure pulse order (default) or legacy camlog wall-clock timestamps.",
+    )
     parser.add_argument("--display-percentile", type=float, default=99.0)
     args = parser.parse_args()
 
@@ -224,13 +272,27 @@ def main() -> int:
     atlas = np.load(args.allen_dir / "allen_area_atlas_native_grid.npy")
     edges = _region_edges(atlas)
 
-    raw_frames = _event_frame_indices_from_camlog(
-        events["lick_samples"],
-        events["sample_rate_hz"],
-        events["created_at"],
-        args.camlog,
-    )
+    if args.frame_align == "camlog":
+        if args.camlog is None:
+            raise ValueError("--frame-align camlog requires --camlog")
+        raw_frames = _event_frame_indices_from_camlog(
+            events["lick_samples"],
+            events["sample_rate_hz"],
+            events["created_at"],
+            args.camlog,
+        )
+        frame_mapping = (
+            "DAQ lick wall-clock times mapped to nearest labcams camlog frame timestamp; "
+            "individual camera-frame indices were divided by 2 to match paired 415/470 SVTcorr timepoints."
+        )
+    else:
+        raw_frames = _event_frame_indices_from_pco(events["lick_samples"], events["pco_samples"])
+        frame_mapping = (
+            "DAQ lick samples mapped to nearest DAQ pco_exposure rising-edge index; "
+            "that raw camera-frame index was divided by 2 to match paired 415/470 SVTcorr timepoints."
+        )
     lick_frames = raw_frames // 2
+    frame_qc = _frame_qc(events["pco_samples"], SVTcorr.shape[1], args.camlog, raw_frames)
     codes = _classify_events(events["lick_samples"], events["strobe_samples"], events["strobe_codes"])
 
     post_n = max(1, int(round(args.post_s * args.fs)))
@@ -287,7 +349,8 @@ def main() -> int:
         "daq_h5": str(args.daq_h5),
         "wfield_results": str(args.wfield_results),
         "allen_dir": str(args.allen_dir),
-        "camlog": str(args.camlog),
+        "camlog": str(args.camlog) if args.camlog is not None else None,
+        "frame_align": args.frame_align,
         "lick_channel": args.lick_channel,
         "lick_thresh_upper_v": args.lick_thresh_upper_v,
         "lick_thresh_lower_v": args.lick_thresh_lower_v,
@@ -301,7 +364,8 @@ def main() -> int:
         "display_limit": lim,
         "lick_voltage_percentiles": events["lick_voltage_percentiles"],
         "lick_detection": events["lick_detection"],
-        "frame_mapping": "DAQ lick wall-clock times mapped to nearest labcams camlog frame timestamp; individual camera-frame indices divided by 2 to match paired 415/470 SVTcorr timepoints.",
+        "frame_mapping": frame_mapping,
+        "frame_alignment_qc": frame_qc,
         "output_png": str(png),
     }
     (args.output / f"{args.label}_lick_aligned_{int(round(args.post_s * 1000))}ms_post_by_spout_summary.json").write_text(

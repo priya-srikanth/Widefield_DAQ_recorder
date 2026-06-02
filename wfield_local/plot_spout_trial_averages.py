@@ -68,12 +68,14 @@ def _load_daq_events(h5_path: Path) -> dict:
     }
 
 
-def _cue_frame_indices_from_pco(cue_samples: np.ndarray, pco_samples: np.ndarray) -> np.ndarray:
-    """Map DAQ cue samples to imaging frame indices using PCO exposure pulses."""
-    insertion = np.searchsorted(pco_samples, cue_samples, side="left")
+def _event_frame_indices_from_pco(event_samples: np.ndarray, pco_samples: np.ndarray) -> np.ndarray:
+    """Map DAQ event samples to raw camera frame indices using DAQ PCO exposure pulses."""
+    if pco_samples.size < 2:
+        raise ValueError("Need at least two DAQ pco_exposure pulses for pulse-order frame alignment.")
+    insertion = np.searchsorted(pco_samples, event_samples, side="left")
     insertion = np.clip(insertion, 1, len(pco_samples) - 1)
-    prev_dist = np.abs(cue_samples - pco_samples[insertion - 1])
-    next_dist = np.abs(pco_samples[insertion] - cue_samples)
+    prev_dist = np.abs(event_samples - pco_samples[insertion - 1])
+    next_dist = np.abs(pco_samples[insertion] - event_samples)
     return np.where(prev_dist <= next_dist, insertion - 1, insertion).astype(np.int64)
 
 
@@ -96,6 +98,38 @@ def _load_camlog_frame_times(camlog: Path) -> np.ndarray:
         raise ValueError(f"No frame timestamps found in {camlog}")
     t0 = times[0]
     return np.array([(t - t0).total_seconds() for t in times], dtype=np.float64)
+
+
+def _frame_qc(
+    pco_samples: np.ndarray,
+    svt_frame_count: int,
+    camlog: Path | None,
+    raw_event_frames: np.ndarray,
+) -> dict:
+    camlog_frame_count = None
+    if camlog is not None:
+        try:
+            camlog_frame_count = int(len(_load_camlog_frame_times(camlog)))
+        except Exception as exc:
+            camlog_frame_count = f"error: {exc}"
+    expected_raw_from_svt = int(svt_frame_count * 2)
+    pco_count = int(len(pco_samples))
+    pco_minus_expected = pco_count - expected_raw_from_svt
+    qc = {
+        "alignment_mode_note": "Primary frame mapping should use DAQ pco_exposure pulse order when available.",
+        "daq_pco_exposure_count": pco_count,
+        "camlog_frame_count": camlog_frame_count,
+        "svt_corrected_frame_count": int(svt_frame_count),
+        "expected_raw_frames_from_svt_pairs": expected_raw_from_svt,
+        "daq_pco_minus_expected_raw_frames": int(pco_minus_expected),
+        "raw_event_frame_min": int(np.min(raw_event_frames)) if raw_event_frames.size else None,
+        "raw_event_frame_max": int(np.max(raw_event_frames)) if raw_event_frames.size else None,
+        "corrected_event_frame_min": int(np.min(raw_event_frames // 2)) if raw_event_frames.size else None,
+        "corrected_event_frame_max": int(np.max(raw_event_frames // 2)) if raw_event_frames.size else None,
+    }
+    if isinstance(camlog_frame_count, int):
+        qc["daq_pco_minus_camlog_frames"] = int(pco_count - camlog_frame_count)
+    return qc
 
 
 def _cue_frame_indices_from_camlog(
@@ -178,6 +212,12 @@ def main() -> int:
     parser.add_argument("--post-s", type=float, default=1.0)
     parser.add_argument("--fs", type=float, default=31.23)
     parser.add_argument(
+        "--frame-align",
+        choices=("pco", "camlog"),
+        default="pco",
+        help="Map DAQ events to imaging frames by DAQ pco_exposure pulse order (default) or legacy camlog wall-clock timestamps.",
+    )
+    parser.add_argument(
         "--activity-percentile",
         type=float,
         default=99.0,
@@ -192,7 +232,9 @@ def main() -> int:
     atlas = np.load(args.allen_dir / "allen_area_atlas_native_grid.npy")
     edges = _region_edges(atlas)
 
-    if args.camlog is not None:
+    if args.frame_align == "camlog":
+        if args.camlog is None:
+            raise ValueError("--frame-align camlog requires --camlog")
         raw_cue_frames = _cue_frame_indices_from_camlog(
             events["cue_samples"],
             events["sample_rate_hz"],
@@ -205,8 +247,13 @@ def main() -> int:
             "individual camera-frame indices were divided by 2 to match paired 415/470 SVTcorr timepoints."
         )
     else:
-        cue_frames = _cue_frame_indices_from_pco(events["cue_samples"], events["pco_samples"])
-        frame_mapping = "Cue samples mapped to nearest DAQ pco_exposure rising edge."
+        raw_cue_frames = _event_frame_indices_from_pco(events["cue_samples"], events["pco_samples"])
+        cue_frames = raw_cue_frames // 2
+        frame_mapping = (
+            "DAQ cue samples mapped to nearest DAQ pco_exposure rising-edge index; "
+            "that raw camera-frame index was divided by 2 to match paired 415/470 SVTcorr timepoints."
+        )
+    frame_qc = _frame_qc(events["pco_samples"], SVTcorr.shape[1], args.camlog, raw_cue_frames)
     cue_codes = _classify_cues(
         events["cue_samples"], events["strobe_samples"], events["strobe_codes"]
     )
@@ -291,6 +338,8 @@ def main() -> int:
         "fs": args.fs,
         "cue_count": int(len(events["cue_samples"])),
         "pco_exposure_count": int(len(events["pco_samples"])),
+        "frame_align": args.frame_align,
+        "frame_alignment_qc": frame_qc,
         "valid_cues_with_windows": int(valid.sum()),
         "counts_by_position": counts,
         "activity_display_limit": activity_lim,
