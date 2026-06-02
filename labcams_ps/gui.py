@@ -908,14 +908,50 @@ def _patch_gui_docks() -> None:
     gui.LabCamsGUI._ps_gui_docks_patch = True
 
 
+def apply_camera_process_patches() -> None:
+    """Patches the camera Process needs, in the parent AND spawned children.
+
+    labcams forces multiprocessing start method "spawn" (labcams/cams.py), so
+    the camera runs in a child interpreter that re-imports this module (as
+    __mp_main__) to unpickle the Process but never calls main()/apply_patches().
+    Monkey-patches applied only in main() are therefore absent in that child,
+    which then runs the unpatched upstream PCOCam._cam_init -- whose only
+    acquire-mode line is the upstream typo ``self.cam.set_acquire_mode = ...``
+    (an attribute assignment, never an SDK call). Combined with pco.Camera()
+    calling reset_settings_to_default() on every connect, the camera ends up in
+    acquire_mode="auto" and free-runs, ignoring the Acquire Enable line -- so
+    trial gating silently does nothing.
+
+    These two patches touch only labcams.pco/labcams.cams (no PyQt), so they are
+    safe to apply at import time in headless child processes. All patch
+    functions are idempotent (guarded by per-patch flags).
+    """
+
+    _patch_offline_pco()
+    _patch_pco_hwio4_status_expos()
+
+
 def apply_patches() -> None:
     """Patch upstream labcams in memory for this process only."""
 
     _patch_pyqtgraph_nan_downsample()
-    _patch_offline_pco()
-    _patch_pco_hwio4_status_expos()
+    apply_camera_process_patches()
     _patch_camstim_trial_messages()
     _patch_gui_docks()
+
+
+# Apply the camera-process patches at import time so they are present in the
+# spawned camera child too (see apply_camera_process_patches docstring). The
+# spawn child re-imports this module to unpickle the camera Process, so this
+# module-level call runs there; re-application from main() is a no-op.
+try:
+    apply_camera_process_patches()
+except Exception as _err:  # pragma: no cover - defensive, keep import working
+    _display(
+        "[labcams_ps] WARNING: camera-process patches failed at import; "
+        "acquire/trigger mode may not be applied in the camera process. "
+        "Original error: {0}".format(_err)
+    )
 
 
 def main() -> None:
