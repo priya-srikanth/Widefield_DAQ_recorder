@@ -135,6 +135,18 @@ function Add-Footer {
     Add-TextBox $Slide $Text 32 518 896 14 6.5 $false "666666" | Out-Null
 }
 
+function Add-ReferenceImageSlide {
+    param([string]$Title, [string]$Subtitle, [string]$ImagePath)
+    if (-not (Test-Path $ImagePath)) {
+        return
+    }
+    $slide = $presentation.Slides.Add($presentation.Slides.Count + 1, $blankLayout)
+    Add-TextBox $slide $Title 32 18 896 24 19 $true "222222" | Out-Null
+    Add-TextBox $slide $Subtitle 32 46 896 17 8.5 $false "666666" | Out-Null
+    Add-FittedPicture $slide $ImagePath 55 72 850 435 | Out-Null
+    Add-Footer $slide $ImagePath
+}
+
 $subjects = @(
     [pscustomobject]@{
         Label = "PS94"
@@ -169,6 +181,16 @@ try {
     Add-TextBox $slide "Mean 470 nm images with Allen outlines and transformed landmark points" 42 198 840 24 13 $false "444444" | Out-Null
     Add-TextBox $slide "Red x = clicked image landmark after transform`r`nWhite open circle = atlas target landmark" 42 255 520 42 11 $false "333333" | Out-Null
     Add-Footer $slide $OutputPath
+
+    Add-ReferenceImageSlide `
+        "Fixed Allen/wfield landmark target positions" `
+        "Reference landmark targets used by the alignment tool; these are transform control coordinates, not session-specific clicks" `
+        "E:\labcams_data\20260601\allen_wfield_reference_landmark_targets.png"
+
+    Add-ReferenceImageSlide `
+        "Allen/wfield ROI label map" `
+        "Color-coded ROI atlas with bilateral region acronyms; generated from the PS95 v6 Allen atlas grid" `
+        "E:\labcams_data\20260601\allen_wfield_roi_labels_ps95_v6.png"
 
     foreach ($subject in $subjects) {
         $summaryPath = Join-Path $subject.Folder "$($subject.Label)_alignment_landmark_points_summary.json"

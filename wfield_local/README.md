@@ -164,6 +164,15 @@ python .\wfield_local\plot_allen_reference_landmarks.py `
   --output "E:\labcams_data\20260601\allen_wfield_reference_landmark_targets.png"
 ```
 
+Plot a color-coded Allen ROI label map:
+
+```powershell
+python .\wfield_local\plot_allen_roi_labels.py `
+  --allen-dir "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\wfield_local_results\allen_aligned_v6" `
+  --output "E:\labcams_data\20260601\allen_wfield_roi_labels_ps95_v6.png" `
+  --title "Allen/wfield ROI labels from PS95 v6 atlas"
+```
+
 ## 7. Alignment Comparison PowerPoint
 
 Build a comparison deck from the generated PNGs:
