@@ -95,6 +95,12 @@ function Get-LickContrastImagePath {
     return Join-Path $folder "$($Subject.LickLabel)_lick_aligned_pairwise_spout_position_contrasts.png"
 }
 
+function Get-CueVsLickImagePath {
+    param($Subject)
+    $folder = Get-LickFolder $Subject
+    return Join-Path $folder "$($Subject.LickLabel)_cue_vs_lick_spout_position_maps.png"
+}
+
 function Add-TextBox {
     param($Slide, [string]$Text, [double]$Left, [double]$Top, [double]$Width, [double]$Height, [double]$Size, [bool]$Bold = $false, [string]$Color = "222222")
     $shape = $Slide.Shapes.AddTextbox(1, $Left, $Top, $Width, $Height)
@@ -250,6 +256,15 @@ try {
             Add-TextBox $slide "Each panel is first condition's 150 ms post-lick map minus second condition's map" 32 46 896 17 8.5 $false "666666" | Out-Null
             Add-FittedPicture $slide $lickContrastPath 28 72 904 435 | Out-Null
             Add-Footer $slide $lickContrastPath
+        }
+
+        $cueVsLickPath = Get-CueVsLickImagePath $subject
+        if (Test-Path $cueVsLickPath) {
+            $slide = $presentation.Slides.Add($presentation.Slides.Count + 1, $blankLayout)
+            Add-TextBox $slide "$($subject.Label) cue-aligned versus lick-aligned maps" 32 18 896 24 19 $true "222222" | Out-Null
+            Add-TextBox $slide "Columns: 1 s post-cue, 150 ms post-lick, and lick minus cue using a shared scale" 32 46 896 17 8.5 $false "666666" | Out-Null
+            Add-FittedPicture $slide $cueVsLickPath 28 72 904 435 | Out-Null
+            Add-Footer $slide $cueVsLickPath
         }
     }
 

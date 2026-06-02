@@ -217,7 +217,30 @@ hysteresis + lockout logic from the stroke/orofacial pipeline:
 - cleanup: drop onset events inside a post-offset lockout window
 - optional refractory: collapse dense lick bouts for imaging-triggered averages
 
-## 9. Sync-Pulse Timebase Alignment
+## 9. Cue vs Lick Spout-Position Comparisons
+
+Compare cue-aligned and lick-aligned maps for the same aligned session:
+
+```powershell
+python .\wfield_local\plot_lick_vs_cue_spout_maps.py `
+  --label PS95_v6 `
+  --cue-maps "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\spout_trial_averages_allen_v6\PS95_v6_spout_positions_1s_pre_post_delta_maps.npz" `
+  --lick-maps "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\lick_aligned_v6\PS95_v6_lick_aligned_150ms_post_by_spout_maps.npz" `
+  --allen-dir "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\wfield_local_results\allen_aligned_v6" `
+  --cue-summary "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\spout_trial_averages_allen_v6\PS95_v6_spout_positions_1s_pre_post_delta_summary.json" `
+  --lick-summary "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\lick_aligned_v6\PS95_v6_lick_aligned_150ms_post_by_spout_summary.json" `
+  --output "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\lick_aligned_v6"
+```
+
+The figure columns are:
+
+- cue-aligned post map
+- lick-aligned post map
+- `lick - cue`
+
+By default the labels are `1 s post-cue` and `150 ms post-lick`; these are not identical windows, so interpret the third column as a descriptive contrast rather than a pure event-type subtraction.
+
+## 10. Sync-Pulse Timebase Alignment
 
 `frame_sync.py` ports the sync-pulse alignment algorithm from the
 stroke/orofacial pipeline. Use it when you need to align DAQ/WaveSurfer-like
