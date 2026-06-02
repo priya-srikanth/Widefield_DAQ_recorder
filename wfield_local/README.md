@@ -315,6 +315,78 @@ import numpy as np
 np.savez_compressed("alignment_template.npz", **template)
 ```
 
+## 11. Treadmill Velocity And Running Bout QC
+
+`treadmill.py` ports the treadmill pieces from the stroke/orofacial pipeline:
+
+```text
+raw voltage -> calibrated speed in mm/s -> Gaussian smoothing -> running bout mask
+```
+
+Calibration uses:
+
+```text
+speed_mm_s = (voltage - offset_v) * (1 / volt_sec_per_rot) * mm_per_rot
+```
+
+Run a QC plot from a DAQ recorder file:
+
+```powershell
+python .\wfield_local\plot_treadmill_running_qc.py `
+  --label PS95 `
+  --daq-h5 "E:\DAQ_recorder_output\PS95_baseline_20260601_153627.h5" `
+  --output "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\treadmill_qc" `
+  --channel treadmill `
+  --offset-v auto `
+  --volt-sec-per-rot <YOUR_CALIBRATION_VALUE> `
+  --mm-per-rot <WHEEL_CIRCUMFERENCE_MM> `
+  --smoothing-sigma-s 0.100 `
+  --thresh-speed 10.0 `
+  --max-gap-duration 0.250 `
+  --min-duration 0.500
+```
+
+Important parameters:
+
+- `--offset-v`: voltage zero offset. Use a known per-rig value when available; `auto` uses the session median for QC only.
+- `--volt-sec-per-rot`: encoder calibration constant.
+- `--mm-per-rot`: treadmill wheel circumference.
+- `--smoothing-sigma-s`: Gaussian smoothing sigma in seconds.
+- `--thresh-speed`: speed threshold in mm/s for running.
+- `--max-gap-duration`: fill below-threshold gaps shorter than this duration.
+- `--min-duration`: discard bouts shorter than this duration.
+
+Outputs:
+
+- `*_treadmill_running_bout_overview.png`
+- `*_treadmill_running_not_running_examples.png`
+- `*_treadmill_running_bouts.npz`
+- `*_treadmill_running_bout_summary.json`
+
+After QC looks sensible, generate running-vs-not-running widefield maps:
+
+```powershell
+python .\wfield_local\plot_running_activity_maps.py `
+  --label PS95_v6 `
+  --daq-h5 "E:\DAQ_recorder_output\PS95_baseline_20260601_153627.h5" `
+  --wfield-results "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\wfield_local_results" `
+  --allen-dir "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\wfield_local_results\allen_aligned_v6" `
+  --output "E:\labcams_data\20260601\PS95_20260601_153653\motion_corrected\treadmill_qc" `
+  --channel treadmill `
+  --offset-v auto `
+  --volt-sec-per-rot <YOUR_CALIBRATION_VALUE> `
+  --mm-per-rot <WHEEL_CIRCUMFERENCE_MM> `
+  --smoothing-sigma-s 0.100 `
+  --thresh-speed 10.0 `
+  --max-gap-duration 0.250 `
+  --min-duration 0.500
+```
+
+This maps corrected imaging frames to DAQ samples through the DAQ-recorded
+`pco_exposure` pulse train, then averages `SVTcorr` frames classified as
+running versus not running. Treat `--offset-v auto` as a QC convenience; for
+final analysis, prefer a known rig/session offset.
+
 ## NeuroCAAS Compatibility Launcher
 
 If `wfield ncaas` crashes during upload with `QProgressBar.setValue` receiving a `numpy.float64`, launch through:
