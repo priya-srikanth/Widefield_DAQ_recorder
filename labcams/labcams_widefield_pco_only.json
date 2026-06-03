@@ -17,7 +17,7 @@
       "allow_missing_camera": true
     }
   ],
-  "recorder_path": "C:\\Data\\labcams_data",
+  "recorder_path": "E:\\labcams_data",
   "recorder_path_format": "{recorder_path}\\{filename}\\{subfolder}\\{dataname}_{run}_{nfiles}",
   "server": "udp",
   "server_port": 9999
