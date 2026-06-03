@@ -412,6 +412,17 @@ def _patch_gui_docks() -> None:
         apply_button = QPushButton("Apply Save Name")
         layout.addWidget(apply_button)
 
+        config_label = QLabel(
+            "Config: {0}".format(os.path.basename(_CONFIG_PATH) if _CONFIG_PATH else "(none)"))
+        config_label.setWordWrap(True)
+        layout.addWidget(config_label)
+        config_row = QHBoxLayout()
+        save_cfg_button = QPushButton("Save Config As...")
+        load_cfg_button = QPushButton("Load Config...")
+        config_row.addWidget(save_cfg_button)
+        config_row.addWidget(load_cfg_button)
+        layout.addLayout(config_row)
+
         def choose_folder():
             folder = QFileDialog.getExistingDirectory(
                 self,
@@ -480,8 +491,73 @@ def _patch_gui_docks() -> None:
             session_label.setText("{0} -> {1}".format(folder or "configured folder", session_name))
             _display("[labcams_ps] Save target set: {0} / {1}".format(folder, session_name))
 
+        def save_config_as():
+            # Save the active config (incl. the ROI the Crop dock wrote) to a new
+            # per-animal JSON, then make it the active config so further ROI edits
+            # save there too. Camera settings still need a relaunch to take effect.
+            global _CONFIG_PATH
+            if _CONFIG_PATH is None:
+                session_label.setText("No active config to save")
+                return
+            base_dir = os.path.dirname(_CONFIG_PATH)
+            animals_dir = os.path.join(base_dir, "animals")
+            try:
+                os.makedirs(animals_dir, exist_ok=True)
+            except Exception:
+                animals_dir = base_dir
+            default_name = (prefix_edit.text().strip() or "animal").split()[0]
+            default_path = os.path.join(animals_dir, default_name + ".json")
+            filename, _filter = QFileDialog.getSaveFileName(
+                self, "Save labcams config as", default_path, "Config (*.json)")
+            if not filename:
+                return
+            try:
+                cfg = json.loads(Path(_CONFIG_PATH).read_text(encoding="utf-8"))
+                folder = folder_edit.text().strip()
+                if folder:
+                    cfg["recorder_path"] = folder
+                Path(filename).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+                _CONFIG_PATH = filename
+                config_label.setText("Config: {0}".format(os.path.basename(filename)))
+                session_label.setText(
+                    "Saved config -> {0} (now active; ROI edits save here)".format(os.path.basename(filename)))
+                _display("[labcams_ps] Saved config as {0} (now active)".format(filename))
+            except Exception as err:
+                session_label.setText("Could not save config: {0}".format(err))
+                _display("[labcams_ps] WARNING: save config failed: {0}".format(err))
+
+        def load_config():
+            if self.recController.saveOnStartToggle.isChecked():
+                session_label.setText("Stop recording before loading a different config")
+                return
+            start_dir = os.path.dirname(_CONFIG_PATH) if _CONFIG_PATH else ""
+            filename, _filter = QFileDialog.getOpenFileName(
+                self, "Load labcams config (relaunches labcams)", start_dir,
+                "Config (*.json);;All files (*.*)")
+            if not filename:
+                return
+            answer = QMessageBox.question(
+                self, "Load config?",
+                "labcams must relaunch to apply camera settings (ROI, etc.) from:\n\n{0}\n\n"
+                "Launch a new labcams with this config and close the current window?".format(filename),
+                QMessageBox.Yes | QMessageBox.No)
+            if answer != QMessageBox.Yes:
+                return
+            import subprocess
+            import sys as _sys
+            repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            try:
+                subprocess.Popen([_sys.executable, "-m", "labcams_ps.gui", filename, "-w"], cwd=repo_root)
+                _display("[labcams_ps] Relaunching labcams with {0}; closing current window.".format(filename))
+                QTimer.singleShot(600, self.close)
+            except Exception as err:
+                session_label.setText("Could not load config: {0}".format(err))
+                _display("[labcams_ps] WARNING: load config failed: {0}".format(err))
+
         browse_button.clicked.connect(choose_folder)
         apply_button.clicked.connect(apply_save_name)
+        save_cfg_button.clicked.connect(save_config_as)
+        load_cfg_button.clicked.connect(load_config)
 
         dock.setWidget(widget)
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)

@@ -138,6 +138,13 @@ The upstream `labcams` package remains installed in the conda `labcams` environm
 
 The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder. The labcams configs default `recorder_path` to `E:\labcams_data`; the Session Save dock overrides it per session.
 
+Per-animal configs: the Session Save dock has `Save Config As...` and `Load Config...`. Set an animal's ROI (Camera Crop/ROI dock) and folder, then `Save Config As...` writes the current config to a new JSON (default `labcams\animals\<name>.json`) and makes it active, so the animal's ROI persists there day to day. `Load Config...` picks a config and relaunches labcams with it (a relaunch is required for camera settings like ROI to take effect). For first launch you can also use `launch_labcams_animal.ps1 <ANIMAL>`, which clones the template to `labcams\animals\<ANIMAL>.json` (full-frame) and launches it:
+
+```powershell
+cd "C:\Github\Widefield_DAQ_recorder"
+.\launch_labcams_animal.ps1 PS92
+```
+
 The `Alignment Preview` dock lets you choose a prior alignment snapshot; it displays the saved reference in red over the live preview in green so the animal/window can be physically aligned before recording. `Load Reference` enables the overlay and `Clear` reliably removes it (both force a redraw, so the overlay also turns off correctly via the right-click `alignment reference` action). This mode changes display only and does not alter recorded frames.
 
 The `Camera Crop / ROI` dock lets you set a PCO ROI in **absolute full-FOV coordinates** (`x0,y0,x1,y1`, 1-based binned-sensor pixels), so the same animal gets the exact same ROI day to day without redrawing a box. The dock shows the full binned FOV (read from the camera). Type the bounds and `Accept ROI` to write them into the active labcams JSON config (a drawn box is optional and is converted to absolute coordinates using the current crop offset). `Clear ROI` removes the crop. Restart labcams before recording after changing ROI so the PCO camera initializes with the requested hardware crop.
