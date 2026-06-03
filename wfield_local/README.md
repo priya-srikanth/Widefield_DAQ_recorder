@@ -46,7 +46,30 @@ Important adjustable parameters:
 - `--mode ecc`: slower, less lean option that can estimate a richer transform. Try on a subset first.
 - `--output-dir`: where corrected `.bin` and shift summaries are written.
 
-The raw `.dat` file is not overwritten.
+The raw `.dat` file is not overwritten. (The script's flag is `--output`.)
+
+### TTL-based LED relabeling (trial-gated recordings)
+
+For trial-gated recordings, run motion correction with `--daq-h5` so the DAT is
+relabeled to DAQ-confirmed 415/470 pairs BEFORE motion correction and SVD. The
+saved `.dat` channel split is only a frame-parity interpretation, which can drift
+from the true LED across trials; relabeling from the DAQ `pco_exposure` /
+`led415_ttl` / `led470_ttl` channels makes channel 0 = 415, channel 1 = 470
+deterministically (and drops any dark inter-trial frames).
+
+```powershell
+python .\wfield_local\run_wfield_motion.py `
+  "E:\labcams_data\...\raw_widefield_data\pco_edge_run000_00000000_2_H_W_uint16.dat" `
+  --daq-h5 "E:\DAQ_recorder_output\<session>.h5" `
+  --relabel-mode acquire-enable `
+  --output "E:\labcams_data\...\motion_corrected"
+```
+
+This writes a `*_daq_led_cleanpairs_*.dat` (plus a frame map) into the output
+folder and motion-corrects that. Use `--relabel-mode rescue` for older
+continuously-saved (LED-gated) sessions that contain dark inter-trial frames.
+The relabel can also be run standalone via
+`python -m wfield_local.trim_illuminated_labcams <dat> <daq.h5> --output-dir <dir> --mode acquire-enable`.
 
 ## 2. SVD And Hemodynamic Correction
 

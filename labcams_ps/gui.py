@@ -155,9 +155,27 @@ def _patch_pco_hwio4_status_expos() -> None:
             _ORIGINAL_PCO_CAM_CONSTRUCTOR(self, *args, **kwargs)
         finally:
             self._ps_skip_external_for_probe = False
+        # Shared full binned-sensor size, filled in by the camera process in
+        # _cam_init. Lets the GUI offer absolute full-FOV ROI coordinates even
+        # when a crop is currently applied (cam.w/cam.h then report the crop).
+        if not hasattr(self, "full_fov_w"):
+            self.full_fov_w = Value("i", 0)
+            self.full_fov_h = Value("i", 0)
 
     def _cam_init_with_status_expos(self):
         _ORIGINAL_PCO_CAM_INIT(self)
+        # Record full binned sensor size for absolute-coordinate ROI entry.
+        try:
+            sizes = self.cam.sdk.get_sizes()
+            binning = self.cam.sdk.get_binning()
+            fw = int(sizes["x max"] / binning["binning x"])
+            fh = int(sizes["y max"] / binning["binning y"])
+            if hasattr(self, "full_fov_w"):
+                self.full_fov_w.value = fw
+                self.full_fov_h.value = fh
+            _display("[labcams_ps] PCO full binned FOV: {0} x {1}".format(fw, fh))
+        except Exception as err:
+            _display("[labcams_ps] Could not read full sensor size: {0}".format(err))
         skip_external = getattr(self, "_ps_skip_external_for_probe", False)
         if skip_external:
             if getattr(self, "acquire_mode", "auto") != "auto":
@@ -301,6 +319,43 @@ def _patch_gui_docks() -> None:
 
     if getattr(gui.LabCamsGUI, "_ps_gui_docks_patch", False):
         return
+
+    # Make the camera widget's alignment-reference overlay clear reliably.
+    # Upstream CamWidget.image() only redraws when the frame counter advances, so
+    # after the reference is cleared the red overlay can persist until the next
+    # new frame (and stays forever if preview is paused). Wrap toggle_reference
+    # (used by the right-click "alignment reference" action) to force a redraw,
+    # and add a robust _ps_set_reference() helper the Alignment Preview dock uses.
+    try:
+        import labcams.widgets as _lwidgets
+
+        if not getattr(_lwidgets.CamWidget, "_ps_reference_patch", False):
+            _orig_toggle_reference = _lwidgets.CamWidget.toggle_reference
+
+            def _toggle_reference_with_redraw(self, filename):
+                _orig_toggle_reference(self, filename)
+                self.lastnFrame = -1  # force image() to redraw (clear/refresh overlay)
+
+            def _ps_set_reference(self, reference):
+                """Set (ndarray) or clear (None) the overlay without firing the
+                checkbox handler, then force a redraw so it appears/disappears
+                even if preview is paused."""
+                self.parameters["reference_channel"] = reference
+                try:
+                    cb = self.reference_toggle.checkbox
+                    cb.blockSignals(True)
+                    cb.setChecked(reference is not None)
+                    cb.blockSignals(False)
+                    self.reference_toggle.value = reference is not None
+                except Exception:
+                    pass
+                self.lastnFrame = -1
+
+            _lwidgets.CamWidget.toggle_reference = _toggle_reference_with_redraw
+            _lwidgets.CamWidget._ps_set_reference = _ps_set_reference
+            _lwidgets.CamWidget._ps_reference_patch = True
+    except Exception as _err:
+        _display("[labcams_ps] WARNING: could not patch CamWidget reference overlay: {0}".format(_err))
 
     original_init_ui = gui.LabCamsGUI.initUI
 
@@ -590,12 +645,15 @@ def _patch_gui_docks() -> None:
         layout = QVBoxLayout(widget)
 
         info = QLabel(
-            "Select a PCO hardware ROI before recording. Accept writes the ROI "
-            "to the active config; restart labcams for the camera to acquire only "
-            "that cropped window."
+            "Set a PCO hardware ROI in ABSOLUTE full-FOV coordinates (x0,y0,x1,y1, "
+            "1-based, binned sensor pixels) so the same animal gets the exact same "
+            "ROI day to day. Type the bounds and Accept (Draw is optional). Accept "
+            "writes the ROI to the active config; restart labcams to apply it."
         )
         info.setWordWrap(True)
         layout.addWidget(info)
+        fov_label = QLabel("Full FOV: unknown")
+        layout.addWidget(fov_label)
 
         row = QHBoxLayout()
         camera_select = QComboBox()
@@ -653,13 +711,35 @@ def _patch_gui_docks() -> None:
             return self.camwidgets[selected_index()]
 
         def current_dims():
+            # Absolute coordinate space = full binned sensor FOV, so typed bounds
+            # are repeatable day to day regardless of the currently-applied crop.
             cam = selected_camera().cam
-            width = int(getattr(cam, "w").value)
-            height = int(getattr(cam, "h").value)
-            return width, height
+            fw = int(getattr(getattr(cam, "full_fov_w", None), "value", 0) or 0)
+            fh = int(getattr(getattr(cam, "full_fov_h", None), "value", 0) or 0)
+            if fw > 0 and fh > 0:
+                return fw, fh
+            return int(cam.w.value), int(cam.h.value)
+
+        def current_roi_offset():
+            # 0-based absolute origin of the currently displayed crop within the
+            # full FOV (so a drawn box can be converted to absolute coordinates).
+            if _CONFIG_PATH:
+                try:
+                    cfg = json.loads(Path(_CONFIG_PATH).read_text(encoding="utf-8"))
+                    roi = cfg["cams"][selected_index()].get("roi")
+                    if roi:
+                        return int(roi[0]) - 1, int(roi[1]) - 1
+                except Exception:
+                    pass
+            return 0, 0
 
         def set_spin_limits():
             width, height = current_dims()
+            cam = selected_camera().cam
+            have_fov = int(getattr(getattr(cam, "full_fov_w", None), "value", 0) or 0) > 0
+            fov_label.setText(
+                "Full FOV: {0} x {1} (binned){2}".format(
+                    width, height, "" if have_fov else " (estimate: camera not reporting; using current frame)"))
             x0_spin.setRange(1, width)
             x1_spin.setRange(1, width)
             y0_spin.setRange(1, height)
@@ -704,12 +784,16 @@ def _patch_gui_docks() -> None:
                 x1 = x1_spin.value()
                 y1 = y1_spin.value()
             else:
+                # The drawn ROI is in displayed-image pixels (relative to the
+                # current crop); add the current crop origin to get absolute
+                # full-FOV coordinates.
+                ox, oy = current_roi_offset()
                 pos = item.pos()
                 size = item.size()
-                x0 = int(round(float(pos.x()))) + 1
-                y0 = int(round(float(pos.y()))) + 1
-                x1 = int(round(float(pos.x() + size.x())))
-                y1 = int(round(float(pos.y() + size.y())))
+                x0 = ox + int(round(float(pos.x()))) + 1
+                y0 = oy + int(round(float(pos.y()))) + 1
+                x1 = ox + int(round(float(pos.x() + size.x())))
+                y1 = oy + int(round(float(pos.y() + size.y())))
             x0 = max(1, min(width - 1, x0))
             y0 = max(1, min(height - 1, y0))
             x1 = max(x0 + 1, min(width, x1))
@@ -861,15 +945,18 @@ def _patch_gui_docks() -> None:
                     (int(target_shape[1]), int(target_shape[0])),
                     interpolation=cv2.INTER_AREA,
                 )
-            cam_widget.parameters["reference_channel"] = reference
-            cam_widget.reference_toggle.value = True
-            cam_widget.reference_toggle.checkbox.setChecked(True)
-            live_image = getattr(cam_widget.view, "image", None)
-            if live_image is not None:
-                try:
-                    cam_widget.image(np.asarray(live_image), cam_widget.lastnFrame + 1)
-                except Exception as err:
-                    _display("[labcams_ps] Loaded reference, but immediate overlay refresh failed: {0}".format(err))
+            # Use the robust setter (does not fire the checkbox handler, which
+            # would otherwise immediately toggle the just-loaded reference back
+            # off), then force a redraw so the overlay appears right away.
+            if hasattr(cam_widget, "_ps_set_reference"):
+                cam_widget._ps_set_reference(reference)
+            else:
+                cam_widget.parameters["reference_channel"] = reference
+                cam_widget.lastnFrame = -1
+            try:
+                cam_widget.update()
+            except Exception as err:
+                _display("[labcams_ps] Loaded reference, but immediate overlay refresh failed: {0}".format(err))
 
         def load_reference():
             filename, _ = QFileDialog.getOpenFileName(
@@ -885,8 +972,18 @@ def _patch_gui_docks() -> None:
 
         def clear_reference():
             cw = current_widget()
-            if cw.parameters.get("reference_channel") is not None:
-                cw.toggle_reference("")
+            # Robust clear: drop the reference and force a redraw so the overlay
+            # disappears even if preview is paused (works regardless of whether a
+            # reference was loaded via this dock or the right-click action).
+            if hasattr(cw, "_ps_set_reference"):
+                cw._ps_set_reference(None)
+            else:
+                cw.parameters["reference_channel"] = None
+                cw.lastnFrame = -1
+            try:
+                cw.update()
+            except Exception:
+                pass
             status.setText("No reference loaded")
             _display("[labcams_ps] Cleared alignment reference")
 

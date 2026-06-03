@@ -1,9 +1,24 @@
-"""Trim a labcams DAT file to DAQ-confirmed illuminated 415/470 frame pairs.
+"""Relabel/trim a labcams DAT to DAQ-confirmed illuminated 415/470 frame pairs.
 
-This rescues sessions where the camera saved continuously but LEDs were gated.
-It uses DAQ pco_exposure, led415_ttl, and led470_ttl channels to label each
-saved physical camera frame, drops dark frames, keeps clean adjacent 415/470
-pairs, and writes a normal two-channel labcams DAT for wfield processing.
+labcams writes camera frames to the .dat in raw arrival order; the 415/470
+"channels" are only an interpretation imposed by the ``_N_H_W_`` filename at read
+time (frame i -> channel i % N). When acquisition is trial-gated, the LED phase
+and the running frame counter can drift apart between trials (a trial with an odd
+frame count flips which wavelength lands in "channel 0"), so a naive reshape mixes
+415 and 470 across trials. Continuously-saved-but-LED-gated sessions additionally
+contain dark inter-trial frames.
+
+This module uses the DAQ ``pco_exposure`` / ``led415_ttl`` / ``led470_ttl``
+channels as ground truth to label every saved physical frame, drop dark frames,
+keep clean adjacent 415/470 pairs, and write a standard two-channel labcams DAT
+(channel 0 = 415, channel 1 = 470) plus a frame map and summary. This is the
+canonical step to run BEFORE motion correction and SVD on trial-gated data.
+
+Modes:
+  rescue          - continuously-saved sessions (expects many dark inter-trial
+                    frames; drops them). Default.
+  acquire-enable  - PCO Acquire-Enable gated sessions (expects ~no dark frames;
+                    warns if many are found, which would indicate a gating fault).
 """
 
 from __future__ import annotations
@@ -185,37 +200,53 @@ def write_trimmed_dat(
     del src
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Trim labcams DAT to illuminated 415/470 pairs using DAQ TTLs.")
-    parser.add_argument("dat", type=Path)
-    parser.add_argument("daq_h5", type=Path)
-    parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--label", default="illuminated")
-    parser.add_argument("--offset", type=int, default=None, help="DAQ pco_exposure offset relative to DAT frames. Default chooses 0/1 automatically.")
-    parser.add_argument("--led-threshold", type=float, default=None)
-    parser.add_argument("--order", choices=("415-470", "470-415", "as-acquired"), default="415-470")
-    parser.add_argument("--chunk-pairs", type=int, default=256)
-    args = parser.parse_args()
+def relabel_dat_from_daq(
+    dat: Path,
+    daq_h5: Path,
+    output_dir: Path,
+    label: str = "illuminated",
+    offset: int | None = None,
+    led_threshold: float | None = None,
+    order: str = "415-470",
+    chunk_pairs: int = 256,
+    mode: str = "rescue",
+) -> dict:
+    """Relabel a labcams DAT to DAQ-confirmed 415/470 pairs and write a new DAT.
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    nchan, height, width, dtype = parse_labcams_dat_name(args.dat)
+    Returns a summary dict; ``summary['output_dat']`` is the relabeled .dat path,
+    suitable as input to motion correction. Importable for pipeline use.
+    """
+    dat = Path(dat)
+    daq_h5 = Path(daq_h5)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    nchan, height, width, dtype = parse_labcams_dat_name(dat)
     if nchan != 2:
         raise ValueError(f"Expected a two-channel labcams DAT filename, got nchan={nchan}")
-    physical_frames = args.dat.stat().st_size // (height * width * dtype.itemsize)
-    if physical_frames * height * width * dtype.itemsize != args.dat.stat().st_size:
+    frame_bytes = height * width * dtype.itemsize
+    physical_frames = dat.stat().st_size // frame_bytes
+    if physical_frames * frame_bytes != dat.stat().st_size:
         raise ValueError("DAT size is not an integer number of physical frames")
 
-    labels, meta = load_daq_labels(args.daq_h5, int(physical_frames), args.offset, args.led_threshold)
-    pairs, pair_labels, skipped = make_clean_pairs(labels, args.order)
-    out_dat = args.output_dir / f"{args.dat.stem}_{args.label}_cleanpairs_2_{height}_{width}_{dtype.name}.dat"
-    map_npz = args.output_dir / f"{args.dat.stem}_{args.label}_cleanpairs_frame_map.npz"
-    map_csv = args.output_dir / f"{args.dat.stem}_{args.label}_cleanpairs_frame_map.csv"
-    summary_path = args.output_dir / f"{args.dat.stem}_{args.label}_cleanpairs_summary.json"
+    labels, meta = load_daq_labels(daq_h5, int(physical_frames), offset, led_threshold)
+    dark_frac = meta["labels_dark"] / max(int(physical_frames), 1)
+    if mode == "acquire-enable" and dark_frac > 0.05:
+        print(f"WARNING [acquire-enable mode]: {meta['labels_dark']} dark frames "
+              f"({100*dark_frac:.1f}%) found; acquire-enable gating should produce ~none. "
+              f"Check that the camera only acquired during trials.", flush=True)
 
-    print(f"source physical frames: {physical_frames:,}")
-    print(f"clean pairs: {len(pairs):,}; skipped illuminated singleton/problem frames: {len(skipped):,}")
-    print(f"output: {out_dat}")
-    write_trimmed_dat(args.dat, out_dat, pairs, height, width, dtype, args.chunk_pairs)
+    pairs, pair_labels, skipped = make_clean_pairs(labels, order)
+    out_dat = output_dir / f"{dat.stem}_{label}_cleanpairs_2_{height}_{width}_{dtype.name}.dat"
+    map_npz = output_dir / f"{dat.stem}_{label}_cleanpairs_frame_map.npz"
+    map_csv = output_dir / f"{dat.stem}_{label}_cleanpairs_frame_map.csv"
+    summary_path = output_dir / f"{dat.stem}_{label}_cleanpairs_summary.json"
+
+    print(f"[relabel:{mode}] source physical frames: {physical_frames:,}", flush=True)
+    print(f"[relabel:{mode}] clean pairs: {len(pairs):,}; skipped singleton/problem frames: {len(skipped):,}; "
+          f"dark dropped: {meta['labels_dark']:,}", flush=True)
+    print(f"[relabel:{mode}] output: {out_dat}", flush=True)
+    write_trimmed_dat(dat, out_dat, pairs, height, width, dtype, chunk_pairs)
 
     np.savez_compressed(
         map_npz,
@@ -235,19 +266,42 @@ def main() -> int:
 
     summary = {
         **meta,
-        "source_dat": str(args.dat),
-        "daq_h5": str(args.daq_h5),
+        "mode": mode,
+        "source_dat": str(dat),
+        "daq_h5": str(daq_h5),
         "output_dat": str(out_dat),
         "frame_map_npz": str(map_npz),
         "frame_map_csv": str(map_csv),
         "output_shape": [int(len(pairs)), 2, int(height), int(width)],
         "output_dtype": dtype.name,
-        "channel_order": args.order,
+        "channel_order": order,
         "clean_pairs": int(len(pairs)),
         "skipped_illuminated_frames": int(len(skipped)),
     }
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    print(json.dumps(summary, indent=2))
+    print(json.dumps(summary, indent=2), flush=True)
+    return summary
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Relabel labcams DAT to DAQ-confirmed 415/470 pairs.")
+    parser.add_argument("dat", type=Path)
+    parser.add_argument("daq_h5", type=Path)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--label", default="illuminated")
+    parser.add_argument("--mode", choices=("rescue", "acquire-enable"), default="rescue",
+                        help="rescue: drop dark inter-trial frames (continuous saving). "
+                             "acquire-enable: warn if dark frames found (gated acquisition).")
+    parser.add_argument("--offset", type=int, default=None, help="DAQ pco_exposure offset relative to DAT frames. Default chooses 0/1 automatically.")
+    parser.add_argument("--led-threshold", type=float, default=None)
+    parser.add_argument("--order", choices=("415-470", "470-415", "as-acquired"), default="415-470")
+    parser.add_argument("--chunk-pairs", type=int, default=256)
+    args = parser.parse_args()
+    relabel_dat_from_daq(
+        args.dat, args.daq_h5, args.output_dir,
+        label=args.label, offset=args.offset, led_threshold=args.led_threshold,
+        order=args.order, chunk_pairs=args.chunk_pairs, mode=args.mode,
+    )
     return 0
 
 

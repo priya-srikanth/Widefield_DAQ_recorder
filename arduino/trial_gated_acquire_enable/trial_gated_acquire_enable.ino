@@ -11,6 +11,14 @@
 // the next LED in the alternation, so LED choice is driven off real exposures
 // and cannot desynchronize from the camera frame stream.
 //
+// Deterministic pair boundaries: each trial starts on 415 (pulse_count reset on
+// trial_start) and the stop is deferred until a 415/470 pair completes, so every
+// trial emits an EVEN number of frames ending on 470. This keeps the running
+// frame parity aligned with the LED across trials (channel 0 = 415, matching the
+// analysis/storage convention), so the live preview and the saved frame stream
+// show a consistent 415/470 split trial to trial. (A DAQ-TTL relabel before
+// motion/SVD remains the ground-truth safety net.)
+//
 // Wiring expectation:
 //   pin 20: behavior trial_start TTL input  (from behavior Arduino pin 6)
 //   pin 19: behavior trial_stop  TTL input  (from behavior Arduino pin 9)
@@ -64,6 +72,12 @@ volatile uint8_t  mode = 3;          // 1: 415, 2: 470, 3: alternate
 volatile uint8_t  armed = 0;         // labcams armed (camera+LED control allowed)
 volatile uint8_t  trial_active = 0;
 volatile uint8_t  trial_gated = 0;   // 0: preview (acquire on while armed), 1: gate on trial state
+// Deferred stop: when a trial_stop/timeout arrives mid-pair we keep acquiring
+// until the current 470/415 pair finishes, so every trial ends on 415 and emits
+// an EVEN number of frames. This keeps the running frame parity aligned with the
+// LED across trials (consistent 415/470 in live preview and in the saved stream).
+// 0 = none, 2 = trial_stop pending, 3 = safety-timeout pending.
+volatile uint8_t  stop_pending = 0;
 volatile uint8_t  last_trial_start_state = LOW;
 volatile uint8_t  last_trial_stop_state  = LOW;
 volatile uint32_t trial_start_ms = 0;
@@ -106,15 +120,30 @@ inline void all_leds_low() {
   digitalWriteFast(PIN_LED1_TRIGGER, LOW);
 }
 
+// End the trial: drop Acquire Enable (camera stops after the current frame),
+// LEDs off, and stamp the trial event for report_events(). Called only at a
+// complete-pair boundary (pulse_count even => last captured frame was 470).
+inline void finalize_trial_stop(uint8_t code) {
+  trial_active = 0;
+  stop_pending = 0;
+  apply_acquire_enable();
+  all_leds_low();
+  last_trial_code = code;
+  last_trial_frame = pulse_count;
+  last_trial_ms = elapsed_ms();
+}
+
 void trial_start_received() {
   if (digitalReadFast(PIN_TRIAL_START) == HIGH) {
     last_trial_start_state = HIGH;
     trial_active = 1;
+    stop_pending = 0;
     trial_start_ms = millis();
-    // Reset alternation phase so each trial starts deterministically on LED1
-    // (blue/470). The first Status Expos rise will increment pulse_count to 1
-    // and pick PIN_LED0_TRIGGER if you prefer violet-first; flip the parity in
-    // exposure_status_changed() if needed.
+    // Reset alternation phase so each trial starts deterministically on LED0
+    // (violet/415, isosbestic): the first Status Expos rise increments
+    // pulse_count to 1 (odd) and exposure_status_changed() maps odd -> LED0
+    // (415). Combined with the deferred stop (ends on 470), every trial is
+    // 415,470,...,415,470 (even frame count, channel 0 = 415).
     pulse_count = 0;
     last_trial_code = 1;
     last_trial_frame = pulse_count;
@@ -126,12 +155,14 @@ void trial_start_received() {
 void trial_stop_received() {
   if (digitalReadFast(PIN_TRIAL_STOP) == HIGH) {
     last_trial_stop_state = HIGH;
-    trial_active = 0;
-    apply_acquire_enable();
-    all_leds_low();
-    last_trial_code = 2;
-    last_trial_frame = pulse_count;
-    last_trial_ms = elapsed_ms();
+    // Defer the stop until the current 415/470 pair completes so the trial ends
+    // on 470 with an even frame count. If we are already at a pair boundary with
+    // no exposure in progress, stop immediately (no extra frames).
+    if (digitalReadFast(PIN_PCO_STATUS_EXPOS) == LOW && (pulse_count % 2 == 0)) {
+      finalize_trial_stop(2);
+    } else {
+      stop_pending = 2;
+    }
   }
 }
 
@@ -159,6 +190,10 @@ void exposure_status_changed() {
           pin_out = PIN_LED1_TRIGGER;
           break;
         case 3:
+          // odd pulse_count -> LED0 (415), even -> LED1 (470). With pulse_count
+          // reset to 0 on trial_start, the first exposure (pulse_count==1) is 415
+          // (isosbestic). Channel 0 = 415 then matches the analysis/storage
+          // convention; deferred stop ends each trial on 470 (complete pair).
           pin_out = (pulse_count % 2 == 0) ? PIN_LED1_TRIGGER : PIN_LED0_TRIGGER;
           break;
         default:
@@ -173,7 +208,13 @@ void exposure_status_changed() {
       last_frame_ms = elapsed_ms();
     }
   } else {
+    // Exposure ended (Status Expos falling). LEDs off, and if a stop is pending
+    // finalize once we have just completed a 470 frame (pulse_count even) so the
+    // trial ends on a complete pair.
     all_leds_low();
+    if (stop_pending && (pulse_count % 2 == 0)) {
+      finalize_trial_stop(stop_pending);
+    }
   }
 }
 
@@ -190,15 +231,15 @@ void poll_trial_inputs() {
   last_trial_start_state = start_state;
   last_trial_stop_state  = stop_state;
 
-  if (trial_gated && trial_active && max_trial_ms > 0) {
+  if (trial_gated && trial_active && max_trial_ms > 0 && !stop_pending) {
     uint32_t elapsed = millis() - trial_start_ms;
     if (elapsed >= max_trial_ms) {
-      trial_active = 0;
-      apply_acquire_enable();
-      all_leds_low();
-      last_trial_code = 3;
-      last_trial_frame = pulse_count;
-      last_trial_ms = elapsed_ms();
+      // Safety timeout: end on a complete pair like a normal stop.
+      if (digitalReadFast(PIN_PCO_STATUS_EXPOS) == LOW && (pulse_count % 2 == 0)) {
+        finalize_trial_stop(3);
+      } else {
+        stop_pending = 3;
+      }
     }
   }
 }
@@ -297,6 +338,7 @@ void serialEvent() {
             last_sync_ms = -1;
             last_frame_ms = -1;
             last_trial_ms = -1;
+            stop_pending = 0;
             trial_active = trial_gated ? 0 : 1;
             armed = 1;
             apply_acquire_enable();
@@ -308,6 +350,7 @@ void serialEvent() {
           case STOP_LEDS:
             armed = 0;
             trial_active = 0;
+            stop_pending = 0;
             apply_acquire_enable();
             all_leds_low();
             reply += STOP_LEDS;
