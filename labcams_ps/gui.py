@@ -500,7 +500,13 @@ def _patch_gui_docks() -> None:
                 session_label.setText("No active config to save")
                 return
             base_dir = os.path.dirname(_CONFIG_PATH)
-            animals_dir = os.path.join(base_dir, "animals")
+            # If the active config already lives in an "animals" folder (e.g. a
+            # per-animal config), save siblings there instead of nesting another
+            # animals/ inside it.
+            if os.path.basename(base_dir).lower() == "animals":
+                animals_dir = base_dir
+            else:
+                animals_dir = os.path.join(base_dir, "animals")
             try:
                 os.makedirs(animals_dir, exist_ok=True)
             except Exception:
