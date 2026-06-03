@@ -73,6 +73,8 @@ Diagnostics and utilities:
 - `arduino/trial_gated_acquire_enable/trial_gated_acquire_enable.ino` - current trial-gated firmware. Drives PCO Acquire Enable as a level signal on pin 18 (HIGH from behavior `trial_start` on pin 20 to `trial_stop` on pin 19); the free-running camera produces frames only while Acquire Enable is HIGH. LEDs are gated closed-loop from PCO Status Expos on pin 3 (same as `constant_camera_dual_wavelength`), so the camera and LEDs cannot desynchronize. `pulse_count` resets on `trial_start` so each trial's first LED is deterministic.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
+- `tools/` - analysis/QC scripts (run in the `wfield` env): `check_trial_gating.py` (verify the camera was gated to trials and LEDs alternated), `estimate_storage.py` (ROI + trial-gating storage savings), `inspect_recording.py` (HDF5/camlog/dat structure). See `tools/README.md`.
+- `wfield_local/trim_illuminated_labcams.py` - rescue a continuously-saved session by trimming the labcams DAT to DAQ-confirmed illuminated 415/470 frame pairs (for recordings made before camera trial-gating worked).
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
 - `labcams/labcams_widefield_pco_trial_gated_acquire_enable.json` - current trial-gated config. Sets `trigger_mode: "auto sequence"` and `acquire_mode: "external"` so the camera free-runs and is gated by the Teensy Acquire Enable line.
 - `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
@@ -173,7 +175,13 @@ The fix (`labcams_ps/gui.py`) moves the camera-process patches into `apply_camer
 
 ### Verifying gating worked
 
-After a short test recording, compare the DAQ `pco_exposure` digital line (line 7) against `trial_start`/`trial_end` and check the labcams `.camlog`:
+After a short test recording, run `tools/check_trial_gating.py` (or compare the DAQ `pco_exposure` digital line against `trial_start`/`trial_end` and the labcams `.camlog` by hand):
+
+```powershell
+& "C:\ProgramData\anaconda3\envs\wfield\python.exe" tools\check_trial_gating.py --daq E:\DAQ_recorder_output\<session>.h5 --camlog C:\path\to\<run>.camlog
+```
+
+The checks:
 
 - the camlog inter-frame intervals should show multi-second gaps at trial boundaries (not a single uninterrupted 16 ms train), and
 - essentially no `pco_exposure` pulses should fall outside trial windows.
