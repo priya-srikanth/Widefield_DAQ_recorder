@@ -70,12 +70,10 @@ Diagnostics and utilities:
 - `arduino/treadmill_rh/treadmill_rh.ino` - Teensy treadmill encoder firmware that outputs speed on DAC/A14 for DAQ recording.
 - `arduino/stim_camera_trigger_dual_wavelength/stim_camera_trigger_dual_wavelength.ino` - Teensy camera/dual-wavelength trigger firmware used by labcams excitation triggering.
 - `arduino/constant_camera_dual_wavelength/constant_camera_dual_wavelength.ino` - labcams-compatible imaging Teensy firmware for PCO exposure-gated dual-wavelength LED triggering with this rig's pin map.
-- `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` - DEPRECATED open-loop trial-gated firmware. The Teensy emits PCO frame-start trigger pulses on pin 18, but when the PCO drops a trigger (e.g. trigger period == exposure time, no readout headroom) the surviving exposures lock to one LED and the live image dims. Superseded by `trial_gated_acquire_enable`.
 - `arduino/trial_gated_acquire_enable/trial_gated_acquire_enable.ino` - current trial-gated firmware. Drives PCO Acquire Enable as a level signal on pin 18 (HIGH from behavior `trial_start` on pin 20 to `trial_stop` on pin 19); the free-running camera produces frames only while Acquire Enable is HIGH. LEDs are gated closed-loop from PCO Status Expos on pin 3 (same as `constant_camera_dual_wavelength`), so the camera and LEDs cannot desynchronize. `pulse_count` resets on `trial_start` so each trial's first LED is deterministic.
 - `diagnose_hardware.py` - short hardware acquisition diagnostic for checking whether NI-DAQmx can acquire from the configured device.
 - `scan_ai.py` - helper for scanning analog input behavior while troubleshooting wiring/ranges.
 - `labcams/labcams_widefield_pco_only.json` - PCO-only labcams config for this rig. It includes `allow_missing_camera` for offline GUI testing through `labcams_ps`.
-- `labcams/labcams_widefield_pco_trial_gated.json` - DEPRECATED config for the open-loop trial-gated method (external PCO frame trigger from the Teensy). Kept for reference; use the acquire-enable config below.
 - `labcams/labcams_widefield_pco_trial_gated_acquire_enable.json` - current trial-gated config. Sets `trigger_mode: "auto sequence"` and `acquire_mode: "external"` so the camera free-runs and is gated by the Teensy Acquire Enable line.
 - `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
 - `wfield_local/` - local widefield processing helpers for motion correction, SVD/hemodynamic correction, Allen alignment, cue/lick-aligned plots, alignment diagnostics, and NeuroCAAS compatibility launch.
@@ -126,32 +124,13 @@ cd "C:\Github\Widefield_DAQ_recorder"
 & "C:\ProgramData\anaconda3\envs\labcams\python.exe" -m labcams_ps.gui ".\labcams\labcams_widefield_pco_only.json" -w
 ```
 
-Trial-gated PCO launch. Use this when the behavior rig sends trial-start/trial-stop TTLs to the labcams Teensy and the Teensy triggers the PCO:
+For trial-gated PCO acquisition (camera frames only during behavior trials), see [Trial-gated acquisition via PCO Acquire Enable (current method)](#trial-gated-acquisition-via-pco-acquire-enable-current-method) below for the launch command, wiring, and verification.
 
-```powershell
-cd "C:\Github\Widefield_DAQ_recorder"
-& "C:\ProgramData\anaconda3\envs\labcams\python.exe" -m labcams_ps.gui ".\labcams\labcams_widefield_pco_trial_gated.json" -w
-```
+The `LED Control` dock has a `Trial-triggered` checkbox. Leave it unchecked for alignment/preview: the Teensy holds Acquire Enable high so the camera free-runs and the PCO Status Expos line gates the selected LED. Check it immediately before the behavior task: the Teensy then raises Acquire Enable on behavior `trial_start` (pin 20) and lowers it on `trial_stop` (pin 19).
 
-For trial-gated imaging, flash `arduino/trial_gated_camera_dual_wavelength/trial_gated_camera_dual_wavelength.ino` to the labcams Teensy and wire:
+The `Max trial` value is a safety timeout for trial-triggered mode. The default is 5 s; set it to 0 to disable. If `trial_stop` is missed, the Teensy lowers Acquire Enable when this timeout expires.
 
-- behavior Arduino pin 6 `trial_start` TTL -> Teensy pin 20
-- behavior Arduino pin 9 `trial_stop` TTL -> Teensy pin 19
-- Teensy pin 18 -> PCO SMA input #1, Exposure Trigger
-- PCO SMA output #4, Status Expos -> Teensy pin 3
-- Teensy pin 5 -> 415 nm/violet LED TTL input
-- Teensy pin 6 -> 470 nm/blue LED TTL input
-- optional Teensy pin 7 -> DAQ if you want a direct copy of the generated frame trigger
-
-The trial-gated config asks the wrapper to set the PCO trigger mode to external exposure start. Pin 18 sends short frame-start pulses; it should not be held high continuously. PCO SMA output #4 should be configured in Camware as `Status Exposure`, `Show common time of 'All lines'`, `On`, `High`.
-
-The `LED Control` dock has a `Trial-triggered` checkbox. Leave it unchecked for alignment/preview: when armed, the Teensy free-runs camera trigger pulses and the PCO Status Expos line gates the selected LED. Check it immediately before the behavior task: the Teensy then waits for behavior `trial_start` on pin 20 and stops frame triggers/LED gates on behavior `trial_stop` on pin 19.
-
-The `Max trial` value is a safety timeout for trial-triggered mode. The default is 5 s; set it to 0 to disable. If trial stop is missed, the Teensy stops frame triggers and LEDs when this timeout expires.
-
-In trial-triggered mode, labcams only receives frames while the Teensy is triggering the camera between trial start and trial stop. LED illumination within those frames is further restricted by PCO Status Expos. This reduces file size by not acquiring inter-trial frames, but it does not save only the illuminated rows/lines inside each camera frame.
-
-If the labcams console shows `[CamStimTrigger] Unknown message: E1` after launch, the Teensy is still running older firmware that does not understand the trial-trigger command; flash the current `trial_gated_camera_dual_wavelength.ino`. If preview free-runs the camera but LEDs stay off, check that PCO SMA output #4 is physically routed to Teensy pin 3 and that camera/Teensy grounds are shared. If trial starts are detected but trial stops are not, check behavior Arduino pin 9 -> Teensy pin 19 wiring and shared ground.
+If the labcams console shows `[CamStimTrigger] Unknown message: ...` after launch, the Teensy is running firmware that does not understand the trial-trigger command; flash the current `trial_gated_acquire_enable.ino`. If preview free-runs the camera but LEDs stay off, check that PCO SMA output #4 is physically routed to Teensy pin 3 and that camera/Teensy grounds are shared. If trial starts are detected but trial stops are not, check the behavior `trial_stop` -> Teensy pin 19 wiring and shared ground.
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
@@ -163,7 +142,7 @@ The `Camera Crop / ROI` dock lets you draw or enter a PCO ROI rectangle. `Accept
 
 ## Trial-gated acquisition via PCO Acquire Enable (current method)
 
-This is the recommended way to record widefield only during behavior trials. It replaces the older open-loop frame-trigger method (`trial_gated_camera_dual_wavelength`), which dimmed the live image at random times: the Teensy drove PCO frame-start triggers at a period equal to the exposure time, so whenever sensor readout had not finished the PCO dropped that trigger; the surviving exposures then all landed on the same (isosbestic, dim) LED for the rest of the trial.
+This is the recommended way to record widefield only during behavior trials. It replaces an earlier open-loop frame-trigger method, which dimmed the live image at random times: the Teensy drove PCO frame-start triggers at a period equal to the exposure time, so whenever sensor readout had not finished the PCO dropped that trigger; the surviving exposures then all landed on the same (isosbestic, dim) LED for the rest of the trial.
 
 In the acquire-enable method the camera free-runs internally (`trigger_mode: "auto sequence"`) and the Teensy gates acquisition with the PCO Acquire Enable input (`acquire_mode: "external"`). The Teensy holds Acquire Enable HIGH for the duration of each trial, so the camera produces zero frames between trials and a clean continuous-looking stream during each trial. LEDs are gated closed-loop from PCO Status Expos, exactly as in continuous acquisition, so the camera and LEDs cannot desynchronize. Per-channel rate is the full 31.25 Hz (62.5 fps total).
 
