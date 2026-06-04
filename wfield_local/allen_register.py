@@ -163,7 +163,7 @@ def run_gui(dat_path):
         for n, (x, y) in points.items():
             d, = ax.plot(x, y, "o", ms=10, mfc="none", mec=LM_COLOR[n], mew=2)
             t = ax.text(x + 4, y, n, color=LM_COLOR[n], fontsize=7)
-            marker_artists += [d, t]
+            marker_artists.extend([d, t])
         # overlays
         if state["overlay"]:
             try:
