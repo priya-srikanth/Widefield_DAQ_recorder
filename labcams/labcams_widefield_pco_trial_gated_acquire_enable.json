@@ -16,13 +16,7 @@
       "excitation_trigger": {
         "port": "COM4"
       },
-      "allow_missing_camera": true,
-      "roi": [
-        72,
-        38,
-        532,
-        514
-      ]
+      "allow_missing_camera": true
     }
   ],
   "recorder_path": "E:\\labcams_data",
