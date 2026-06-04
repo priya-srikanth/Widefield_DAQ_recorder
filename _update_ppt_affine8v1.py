@@ -42,7 +42,7 @@ TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, S
 # per-figure: (title_suffix, subdir, filename_suffix, left, top, width)
 FIGS = [
     (": mean 415/470 nm with Allen outlines", "spout", "_mean_415_470_with_allen_overlay.png", 0.10, 1.95, 13.14),
-    (": cue-aligned spout averages (1 s pre, 1 s post, post-pre delta)", "spout", "_spout_positions_1s_pre_post_delta_allen_overlay.png", 4.91, 1.59, 3.51),
+    (": cue-aligned spout averages (1 s pre, 1 s post, post-pre delta)", "spout", "_spout_positions_1s_pre_post_delta_shared_scale.png", 4.91, 1.59, 3.51),
     (": cue pairwise delta-position contrasts", "spout", "_pairwise_spout_position_delta_contrasts_allen_overlay.png", 4.01, 1.59, 5.31),
     (": post-lick maps by spout position (150 ms)", "lick", "_lick_aligned_150ms_post_by_spout.png", 2.60, 1.40, 8.20),
     (": post-lick pairwise delta-position contrasts", "lick", "_lick_aligned_pairwise_spout_position_contrasts.png", 4.01, 1.59, 5.31),
@@ -181,7 +181,22 @@ if os.path.exists(pb_png) and pb_title not in present:
             pb_png, 0.15, 1.7, 12.9)
     pb_added = True
 
+# ---- 5) Move all QC / diagnostic slides to the very end (after activity maps) ----
+def _is_qc(t: str) -> bool:
+    t = t.lower()
+    return ("motion-correction qc" in t) or ("photobleach" in t) or ("frame alignment qc" in t)
+
+lst = prs.slides._sldIdLst
+children = list(lst)
+titles = [slide_title(s) for s in prs.slides]
+moved = 0
+for el, t in zip(children, titles):
+    if _is_qc(t):
+        lst.remove(el)
+        lst.append(el)   # append in original relative order -> stable, idempotent
+        moved += 1
+
 prs.save(DST)
 print(f"swapped {swapped} map pictures; appended sections: {added}; QC slides: {qc_added}; "
-      f"photobleach: {pb_added}; slides now {len(prs.slides)}")
+      f"photobleach: {pb_added}; moved-to-end: {moved}; slides now {len(prs.slides)}")
 print(f"backup at {DST}.bak")
