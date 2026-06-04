@@ -224,27 +224,56 @@ def run_gui(dat_path):
                 bd, best = dd, n
         return best
 
-    def on_press(event):
-        if event.inaxes is not ax or event.xdata is None or event.button != 1:
+    pan = {}  # captured at press: fixed transform + start limits, so pan is stable
+
+    def _start_pan(event):
+        pan["inv"] = ax.transData.inverted()
+        pan["px"], pan["py"] = event.x, event.y
+        pan["xlim"], pan["ylim"] = ax.get_xlim(), ax.get_ylim()
+
+    def _do_pan(event):
+        if event.x is None or "inv" not in pan:
             return
-        x, y = float(event.xdata), float(event.ydata)
-        near = _nearest_point(x, y)
-        if near is not None:          # grab existing landmark to drag
-            state["drag"] = near
-        else:                          # place the selected landmark, then allow drag
-            points[state["place"]] = (x, y)
-            state["drag"] = state["place"]
-            draw()
+        d0 = pan["inv"].transform((pan["px"], pan["py"]))
+        d1 = pan["inv"].transform((event.x, event.y))
+        ddx, ddy = d1[0] - d0[0], d1[1] - d0[1]
+        ax.set_xlim(pan["xlim"][0] - ddx, pan["xlim"][1] - ddx)
+        ax.set_ylim(pan["ylim"][0] - ddy, pan["ylim"][1] - ddy)
+        fig.canvas.draw_idle()
+
+    def on_press(event):
+        if event.inaxes is not ax or event.xdata is None:
+            return
+        if event.button == 3:                      # right-drag = pan
+            state["mode"] = "pan"; _start_pan(event); return
+        if event.button == 1:
+            near = _nearest_point(event.xdata, event.ydata)
+            if near is not None:                   # left-drag on a label = move it
+                state["mode"] = "drag_label"; state["drag"] = near; return
+            # left on empty: click=place, drag=pan -> decide on motion/release
+            state["mode"] = "pending"
+            state["press_xy"] = (float(event.xdata), float(event.ydata))
+            state["press_pix"] = (event.x, event.y)
+            _start_pan(event)
 
     def on_motion(event):
-        if state["drag"] and event.inaxes is ax and event.xdata is not None:
-            points[state["drag"]] = (float(event.xdata), float(event.ydata))
-            draw(fast=True)
+        m = state.get("mode")
+        if m == "drag_label" and event.inaxes is ax and event.xdata is not None:
+            points[state["drag"]] = (float(event.xdata), float(event.ydata)); draw(fast=True)
+        elif m == "pan":
+            _do_pan(event)
+        elif m == "pending" and event.x is not None:
+            dx = event.x - state["press_pix"][0]; dy = event.y - state["press_pix"][1]
+            if (dx * dx + dy * dy) ** 0.5 > 5:     # moved -> it's a pan
+                state["mode"] = "pan"; _do_pan(event)
 
     def on_release(event):
-        if state["drag"]:
-            state["drag"] = None
-            draw()  # full redraw (with overlay) once the drag ends
+        m = state.get("mode")
+        if m == "drag_label":
+            draw()
+        elif m == "pending":                       # released without dragging = place
+            points[state["place"]] = state["press_xy"]; draw()
+        state["mode"] = None; state["drag"] = None
 
     def on_scroll(event):
         if event.inaxes is not ax or event.xdata is None:
@@ -254,6 +283,10 @@ def run_gui(dat_path):
         x0, x1 = ax.get_xlim(); y0, y1 = ax.get_ylim()
         ax.set_xlim(x - (x - x0) * scale, x + (x1 - x) * scale)
         ax.set_ylim(y - (y - y0) * scale, y + (y1 - y) * scale)
+        fig.canvas.draw_idle()
+
+    def reset_view():
+        ax.set_xlim(-0.5, reader.W - 0.5); ax.set_ylim(reader.H - 0.5, -0.5)
         fig.canvas.draw_idle()
 
     fig.canvas.mpl_connect("button_press_event", on_press)
