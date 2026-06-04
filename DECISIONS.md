@@ -125,13 +125,34 @@ pixel of each label transition then masked to labeled pixels, dropping the brain
 edge). The shared version marks both pixels of each transition before masking, so the
 outline closes all around (verified left border 96/524 → 524/524).
 
-## Raw-data standby / archive
+## Server layout, archiving & safety
 
-Original, un-motion-corrected `raw_widefield_data` `.dat` files (and the 6/1 full-FOV
-session files) are archived to **`M:\Widefield\labcams_raw_data\<date>\<animal>\`**.
-Only the raw camera `.dat` is archived — not camlogs, `*_cleanpairs_*`/`motioncorrect_*`
-files, or analysis outputs. Copy first, verify sizes, confirm, then delete the E:
-originals.
+Two institutional file servers (copy-only; **never delete from a server without
+explicit per-action permission**, and **only ever write inside the `Priya\` folder**):
+
+- **M: (standby)** = `\\standby.files.med.harvard.edu\hms\neurobio\sabatini\collaborations\Priya`.
+  **Raw, un-motion-corrected** `.dat` (raw_widefield_data + the 6/1 full-FOV session
+  files) → `M:\Widefield\labcams_raw_data\<date>\<animal>\`. Only the raw camera
+  `.dat`; not camlogs/cleanpairs/motioncorrect/analysis. Copy → verify sizes → confirm
+  → then delete E: originals.
+- **N: (MICROSCOPE)** = `\\research.files.med.harvard.edu\Neurobio`, folder
+  `N:\MICROSCOPE\Priya\`. **Analyzed data** (motion-corrected `.bin` videos, SVD,
+  Allen alignment, maps/QC, PPTs) → `N:\MICROSCOPE\Priya\Widefield\labcams\<rel path>\`.
+  Copy excludes the regenerable raw + cleanpairs `*_uint16.dat`. This is also where the
+  GPU machine reads inputs for LocaNMF.
+
+See the [[microscope-server-safety]] memory for the hard rules.
+
+## LocaNMF (run on the GPU machine)
+
+`wfield_local/run_locanmf.py` runs `wfield.local_nmf.compute_locaNMF` on an
+`allen_aligned_*` folder (`U_atlas` + `allen_area_atlas_native_grid` +
+`allen_brain_mask_native_grid` + `SVTcorr`) → localized components `A`/`C`/`regions` +
+montage. Needs PyTorch (the `torch` package) + the `locanmf` package + a CUDA GPU; this
+rig PC has none, so it runs on the NVIDIA box. `GPU_LOCANMF_KICKOFF.md` is the paste-ready
+kickoff (clone repo → set up torch+locanmf env matching the GPU's CUDA → read data from
+`N:\MICROSCOPE\Priya\...` → run). There is no maintained newer-Python *prebuilt* locanmf;
+newer Python compiles the extension from source (see the script header).
 
 ## Significant local-analysis modules (added during this work)
 
@@ -145,6 +166,7 @@ originals.
   pass/warn verdict).
 - `wfield_local/cross_day_align.py` — within-animal cross-day vasculature registration
   (above).
+- `wfield_local/run_locanmf.py` + `GPU_LOCANMF_KICKOFF.md` — LocaNMF on the GPU box.
 - `run_wfield_local` — added `--detrend-order` and exposed `--freq-highpass` /
   `--freq-lowpass` (the default 0.1 Hz highpass already removes the slow 415 LED
   drift; detrend is for when a gentler highpass is wanted).
