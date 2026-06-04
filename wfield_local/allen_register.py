@@ -158,13 +158,19 @@ def run_gui(dat_path):
     overlay_artists, marker_artists = [], []
     keep = []  # retain widget refs so matplotlib does not garbage-collect them
     state = {"channel": 0, "navg": 60, "pair": reader.npairs // 2,
-             "place": "OB_center", "overlay": True, "compare": False, "ttype": "affine"}
+             "place": "OB_center", "overlay": True, "compare": False, "ttype": "affine",
+             "swap": False, "drag": None}
     sess_dir = os.path.dirname(dat_path)
+
+    def eff_off():
+        # which physical frame parity to show as the chosen channel; "swap" flips
+        # the 415/470 assignment (the parity->wavelength mapping is session-specific)
+        return state["channel"] ^ (1 if state["swap"] else 0)
 
     fig = plt.figure(figsize=(16, 9))
     ax = fig.add_axes([0.03, 0.22, 0.50, 0.73])
-    ax.set_title("click to place the selected landmark")
-    im = ax.imshow(reader.image(state["pair"], state["channel"], state["navg"]), cmap="gray")
+    ax.set_title("click to place; drag a point to move it; scroll to zoom")
+    im = ax.imshow(reader.image(state["pair"], eff_off(), state["navg"]), cmap="gray")
 
     # reference guide panel (static)
     ax_ref = fig.add_axes([0.56, 0.55, 0.20, 0.40])
@@ -177,7 +183,7 @@ def run_gui(dat_path):
                 ln, = ax.plot(r[side + "_x"], r[side + "_y"], "-", color=color, lw=0.7, alpha=0.85)
                 overlay_artists.append(ln)
 
-    def draw():
+    def draw(fast=False):
         for a in overlay_artists + marker_artists:
             a.remove()
         overlay_artists.clear(); marker_artists.clear()
@@ -185,7 +191,7 @@ def run_gui(dat_path):
             d, = ax.plot(x, y, "o", ms=10, mfc="none", mec=LM_COLOR[n], mew=2)
             t = ax.text(x + 4, y, n, color=LM_COLOR[n], fontsize=7)
             marker_artists.extend([d, t])
-        if state["overlay"]:
+        if state["overlay"] and not fast:
             try:
                 if state["compare"]:
                     ts, ns, _ = compute_transform(points, "similarity")
@@ -203,17 +209,57 @@ def run_gui(dat_path):
         fig.canvas.draw_idle()
 
     def refresh_image():
-        img = reader.image(state["pair"], state["channel"], state["navg"])
+        img = reader.image(state["pair"], eff_off(), state["navg"])
         im.set_data(img)
         lo, hi = np.percentile(img, [1, 99.5]); im.set_clim(lo, hi)
         draw()
 
-    def on_click(event):
+    def _nearest_point(x, y):
+        # threshold scales with current zoom so it stays grabbable
+        x0, x1 = ax.get_xlim(); thr = 0.03 * abs(x1 - x0) + 6
+        best, bd = None, thr
+        for n, (px, py) in points.items():
+            dd = ((x - px) ** 2 + (y - py) ** 2) ** 0.5
+            if dd < bd:
+                bd, best = dd, n
+        return best
+
+    def on_press(event):
         if event.inaxes is not ax or event.xdata is None or event.button != 1:
             return
-        points[state["place"]] = (float(event.xdata), float(event.ydata))
-        draw()
-    fig.canvas.mpl_connect("button_press_event", on_click)
+        x, y = float(event.xdata), float(event.ydata)
+        near = _nearest_point(x, y)
+        if near is not None:          # grab existing landmark to drag
+            state["drag"] = near
+        else:                          # place the selected landmark, then allow drag
+            points[state["place"]] = (x, y)
+            state["drag"] = state["place"]
+            draw()
+
+    def on_motion(event):
+        if state["drag"] and event.inaxes is ax and event.xdata is not None:
+            points[state["drag"]] = (float(event.xdata), float(event.ydata))
+            draw(fast=True)
+
+    def on_release(event):
+        if state["drag"]:
+            state["drag"] = None
+            draw()  # full redraw (with overlay) once the drag ends
+
+    def on_scroll(event):
+        if event.inaxes is not ax or event.xdata is None:
+            return
+        scale = 1 / 1.2 if event.step > 0 else 1.2
+        x, y = event.xdata, event.ydata
+        x0, x1 = ax.get_xlim(); y0, y1 = ax.get_ylim()
+        ax.set_xlim(x - (x - x0) * scale, x + (x1 - x) * scale)
+        ax.set_ylim(y - (y - y0) * scale, y + (y1 - y) * scale)
+        fig.canvas.draw_idle()
+
+    fig.canvas.mpl_connect("button_press_event", on_press)
+    fig.canvas.mpl_connect("motion_notify_event", on_motion)
+    fig.canvas.mpl_connect("button_release_event", on_release)
+    fig.canvas.mpl_connect("scroll_event", on_scroll)
 
     # sliders (left margin leaves room for labels)
     ax_t = fig.add_axes([0.12, 0.13, 0.41, 0.03])
@@ -226,6 +272,9 @@ def run_gui(dat_path):
     ax_c = fig.add_axes([0.78, 0.82, 0.09, 0.11]); ax_c.set_title("channel", fontsize=9)
     r_c = RadioButtons(ax_c, ("415", "470"))
     r_c.on_clicked(lambda l: (state.update(channel=0 if l == "415" else 1), refresh_image()))
+    ax_sw = fig.add_axes([0.56, 0.46, 0.19, 0.05])
+    c_sw = CheckButtons(ax_sw, ["swap 415/470"], [False])
+    c_sw.on_clicked(lambda l: (state.update(swap=not state["swap"]), refresh_image()))
     ax_tt = fig.add_axes([0.88, 0.82, 0.11, 0.11]); ax_tt.set_title("transform", fontsize=9)
     r_tt = RadioButtons(ax_tt, ("affine", "similarity"))
     r_tt.on_clicked(lambda l: (state.update(ttype=l), draw()))
@@ -258,7 +307,7 @@ def run_gui(dat_path):
     b_save.on_clicked(do_save)
     b_clear.on_clicked(lambda _: (points.clear(), draw(), msg.set_text("cleared")))
 
-    keep.extend([s_t, s_a, r_c, r_tt, r_l, co, cc, tb, b_save, b_clear])
+    keep.extend([s_t, s_a, r_c, c_sw, r_tt, r_l, co, cc, tb, b_save, b_clear])
     fig._allen_widgets = keep  # extra strong ref on the figure
     refresh_image()
     fig.text(0.78, 0.115, "compare = cyan(similarity) + magenta(affine)\nSave dir:\n" + sess_dir, fontsize=7)
