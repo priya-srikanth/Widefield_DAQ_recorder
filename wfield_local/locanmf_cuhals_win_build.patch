@@ -1,0 +1,65 @@
+diff --git a/locanmf/cuhals.cpp b/locanmf/cuhals.cpp
+index c17f808..7184b43 100644
+--- a/locanmf/cuhals.cpp
++++ b/locanmf/cuhals.cpp
+@@ -18,7 +18,7 @@ void gpuUpdate(int const N, int const P,
+                bool const nonnegative);
+ 
+ /* SIMD Parallelizable CPU Update Function */
+-#pragma omp declare simd notinbranch
++// NB: MSVC /openmp does not support 'omp declare simd' (CPU-path SIMD hint; GPU path unaffected).
+ float rect(float val) { return val > 0.0 ? val : 0; }
+ 
+ /* Sequential HALS Update Of One Coefficient Matrix Given Precomputed Quantities
+@@ -51,11 +51,9 @@ void seqCpuUpdate(int const N, int const P,
+ 
+         // Perform (Independent) Scalar Updates
+         if (nonnegative){
+-#pragma omp simd
+             for (int pdx = 0; pdx < P; pdx++)
+                 Bn[pdx] = rect(Bn[pdx] + Dn[pdx]);
+         } else {
+-#pragma omp simd
+             for (int pdx = 0; pdx < P; pdx++)
+                 Bn[pdx] += Dn[pdx];
+         }
+diff --git a/setup.py b/setup.py
+index 0c1e9f6..4d2a4ba 100644
+--- a/setup.py
++++ b/setup.py
+@@ -8,16 +8,31 @@ with open("README.md", "r", encoding="utf8") as fh:
+     long_description = fh.read()
+ 
+ ENV = os.environ["CONDA_PREFIX"]  # Absolute path of active conda env root
+-LIBRARY_DIRS = [os.path.join(ENV, "lib")]  # .[so,dylib]
+-INCLUDE_DIRS = [os.path.join(ENV, "include")]
++if sys.platform == "win32":
++    # conda headers/import-libs live under Library\ on Windows; MSVC uses /openmp,
++    # links MKL via mkl_rt, and cl 19.44 > CUDA 12.4's supported max so allow it.
++    INCLUDE_DIRS = [os.path.join(ENV, "Library", "include")]
++    LIBRARY_DIRS = [os.path.join(ENV, "Library", "lib")]
++    _cxx_args = ["/openmp", "/I" + INCLUDE_DIRS[0]]
++    _nvcc_args = ["-allow-unsupported-compiler"]
++    _libs = ["mkl_rt"]
++else:
++    LIBRARY_DIRS = [os.path.join(ENV, "lib")]  # .[so,dylib]
++    INCLUDE_DIRS = [os.path.join(ENV, "include")]
++    _cxx_args = ["-fopenmp", "-I" + INCLUDE_DIRS[0]]
++    _nvcc_args = []
++    _libs = []
+ 
+ ext_modules = []
+ if '--with-extension' in sys.argv:
+     ext_modules.append(
+         CUDAExtension('cuhals',
+                       ['./locanmf/cuhals.cpp', './locanmf/cuhals_kernels.cu'],
+-                      extra_compile_args={'cxx': ["-fopenmp", "-I"+INCLUDE_DIRS[0]],
+-                                          'nvcc': []}))
++                      include_dirs=INCLUDE_DIRS,
++                      library_dirs=LIBRARY_DIRS,
++                      libraries=_libs,
++                      extra_compile_args={'cxx': _cxx_args,
++                                          'nvcc': _nvcc_args}))
+     sys.argv.remove('--with-extension')
+ 
+ # setup(name='locaNMF',

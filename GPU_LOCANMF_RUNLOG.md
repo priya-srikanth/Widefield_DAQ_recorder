@@ -53,20 +53,40 @@ algorithm/results:
 3. `demix.py` `TemporalLS._temporal_update`: `torch.inverse(x, out=x)` aliases input→output
    → `x.copy_(torch.inverse(x))`. (torch ≥1.5)
 
-## cuhals (CUDA HALS kernel): NOT built — deferred
+## cuhals (CUDA HALS kernel): BUILT (2026-06-04)
 - `locanmf` runs fine without the optional `cuhals` extension: `demix.py` does
   `try: import cuhals / except ImportError: use_cuhals=False` and falls back to a native
-  PyTorch HALS that **still runs on the GPU**.
-- **Does cuhals change the computation? No.** `cuhals.update()` and `native_update()` take
-  identical args and implement the same HALS coordinate-descent sweep; cuhals' batching only
-  reorganizes the work (precompute cross-batch residual via one `addmm`, then sequential
-  within-batch sweep), parallelizing over *pixels*, not component order. Same fixed point,
-  same components — differences are floating-point-rounding level only. It is purely a speed
-  optimization.
-- **Why not built here:** compiling the CUDA C++ extension needs a host MSVC compiler
-  (`cl.exe`), which is absent (no VS C++ workload). It also needs `mkl.h` (not in the env)
-  and a Windows flag port (`-fopenmp` → `/openmp` in `setup.py`). Building requires installing
-  the MSVC C++ Build Tools first. Revisit only if the native-PyTorch runtime is too slow.
+  PyTorch HALS that still runs on the GPU but is much slower (kernel-launch bound).
+- **Does cuhals change the computation? No (algorithmically).** `cuhals.update()` and
+  `native_update()` take identical args and implement the same HALS coordinate-descent sweep;
+  cuhals' batching only reorganizes the work (precompute cross-batch residual via one `addmm`,
+  then sequential within-batch sweep), parallelizing over *pixels*, not component order. It is
+  the LocaNMF authors' canonical path (pure-torch is the fallback). NB: end-to-end LocaNMF has
+  **stochastic initialization**, so two runs (cuhals vs torch, or torch vs torch) are NOT
+  bit-identical — validate by equivalent *quality*, not bit-match. cuhals-vs-torch on PS94 6/1
+  r2=0.95: n=129 vs 130, median localization 81% vs 79% → equivalent.
+- **Build recipe (this box):** prerequisites = VS 2022 "Desktop development with C++"
+  workload (MSVC v143) + CUDA Toolkit 12.4 (matches torch cu124; install Custom and UNCHECK
+  the bundled display driver — the installed driver is newer). Then:
+  1. `conda install -n locanmf -c conda-forge mkl-devel`  (provides `mkl.h` + `mkl_rt.lib`)
+  2. apply `wfield_local/locanmf_cuhals_win_build.patch` to the locaNMF clone — makes
+     `setup.py` OS-aware (conda `Library\` include/lib, `/openmp`, link `mkl_rt`,
+     `nvcc -allow-unsupported-compiler` since cl 19.44 > CUDA 12.4's max), and drops the
+     MSVC-incompatible `#pragma omp [declare] simd` hints from `cuhals.cpp` (CPU-path-only;
+     GPU path unaffected).
+  3. build from a `vcvars64` shell with `CUDA_HOME=...\v12.4`, `DISTUTILS_USE_SDK=1`,
+     `CONDA_PREFIX` set: `python setup.py build_ext --with-extension --inplace`
+  4. copy the resulting `cuhals.cp310-win_amd64.pyd` into the env `site-packages\`.
+  Verify: `python -c "import cuhals; from locanmf.demix import use_cuhals; print(use_cuhals)"`
+  → `True`.
+
+## Parameter sweep (kill-safe / resumable / cuhals)
+`wfield_local/sweep_locanmf.py` runs `run_locanmf` over an (r2_thresh × loc_thresh) grid
+SEQUENTIALLY, each combo into its own dir, writing outputs only on completion and skipping
+combos whose `summary.json` already exists. So the sweep can be **terminated anytime** (to
+free the machine for behavior) with at most the in-progress combo lost, and **resumes** on
+re-launch. Per-combo `run.log` + master `sweep.log` stream live (subprocess `python -u`,
+line-buffered file — not PowerShell `*>`, which buffers).
 
 ## Performance note
 Pure-PyTorch HALS on a full session is slow on this box: 6/1 PS94 (U 540×640×100,
