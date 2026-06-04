@@ -169,7 +169,7 @@ def run_gui(dat_path):
 
     fig = plt.figure(figsize=(16, 9))
     ax = fig.add_axes([0.03, 0.22, 0.50, 0.73])
-    ax.set_title("click to place; drag a point to move it; scroll to zoom")
+    ax.set_title("click=place  drag pt=move  Del=delete  drag bg/right-drag=pan  scroll=zoom")
     im = ax.imshow(reader.image(state["pair"], eff_off(), state["navg"]), cmap="gray")
 
     # reference guide panel (static)
@@ -324,9 +324,11 @@ def run_gui(dat_path):
 
     ax_lab = fig.add_axes([0.83, 0.29, 0.16, 0.045])
     tb = TextBox(ax_lab, "label ", initial="v1")
-    ax_save = fig.add_axes([0.78, 0.21, 0.10, 0.06]); b_save = Button(ax_save, "Save")
-    ax_clear = fig.add_axes([0.89, 0.21, 0.10, 0.06]); b_clear = Button(ax_clear, "Clear")
-    msg = fig.text(0.78, 0.045, "", fontsize=7, wrap=True)
+    ax_save = fig.add_axes([0.78, 0.235, 0.10, 0.05]); b_save = Button(ax_save, "Save")
+    ax_clear = fig.add_axes([0.89, 0.235, 0.10, 0.05]); b_clear = Button(ax_clear, "Clear")
+    ax_load = fig.add_axes([0.78, 0.17, 0.10, 0.05]); b_load = Button(ax_load, "Load")
+    ax_del = fig.add_axes([0.89, 0.17, 0.10, 0.05]); b_del = Button(ax_del, "Delete pt")
+    msg = fig.text(0.78, 0.02, "", fontsize=7, wrap=True)
 
     def do_save(_):
         lab = (tb.text or "v1").strip() or "v1"
@@ -337,15 +339,75 @@ def run_gui(dat_path):
         except Exception as e:
             msg.set_text("Save failed: %s" % e)
         fig.canvas.draw_idle()
+
+    def load_into(fn):
+        import json
+        with open(fn) as fh:
+            d = json.load(fh)
+        lm = d.get("landmarks_match") or d.get("landmarks_im")  # clicked image coords
+        if not lm or "name" not in lm or "x" not in lm:
+            raise ValueError("file has no landmarks_match with names")
+        points.clear()
+        for nm, x, y in zip(lm["name"], lm["x"], lm["y"]):
+            if nm in LM_MM:
+                points[nm] = (float(x), float(y))
+        tt = d.get("transform_type")
+        if tt in ("affine", "similarity"):
+            state["ttype"] = tt
+            try:
+                r_tt.set_active(("affine", "similarity").index(tt))
+            except Exception:
+                pass
+        mlab = re.match(r"dorsal_cortex_landmarks_(.+)\.json$", os.path.basename(fn))
+        if mlab:
+            try:
+                tb.set_val(mlab.group(1))
+            except Exception:
+                pass
+        draw()
+        msg.set_text("Loaded %d pts (%s)\n%s" % (len(points), tt or "?", os.path.basename(fn)))
+
+    def do_load(_):
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk(); root.withdraw()
+            fn = filedialog.askopenfilename(
+                initialdir=sess_dir, title="Load landmark JSON",
+                filetypes=[("landmark json", "*.json"), ("all", "*.*")])
+            root.destroy()
+            if fn:
+                load_into(fn)
+        except Exception as e:
+            msg.set_text("Load failed: %s" % e)
+        fig.canvas.draw_idle()
+
+    def delete_point(name):
+        if name in points:
+            del points[name]; draw(); msg.set_text("deleted " + name)
+            fig.canvas.draw_idle()
+
+    def on_key(event):
+        if event.key in ("delete", "backspace"):
+            tgt = None
+            if event.inaxes is ax and event.xdata is not None:
+                tgt = _nearest_point(event.xdata, event.ydata)
+            delete_point(tgt or state["place"])  # nearest under cursor, else selected
+
     b_save.on_clicked(do_save)
     b_clear.on_clicked(lambda _: (points.clear(), draw(), msg.set_text("cleared")))
+    b_load.on_clicked(do_load)
+    b_del.on_clicked(lambda _: delete_point(state["place"]))
+    fig.canvas.mpl_connect("key_press_event", on_key)
     ax_reset = fig.add_axes([0.12, 0.02, 0.14, 0.035]); b_reset = Button(ax_reset, "Reset view")
     b_reset.on_clicked(reset_view)
 
-    keep.extend([s_t, s_a, r_c, c_sw, r_tt, r_l, co, cc, tb, b_save, b_clear, b_reset])
+    keep.extend([s_t, s_a, r_c, c_sw, r_tt, r_l, co, cc, tb,
+                 b_save, b_clear, b_load, b_del, b_reset])
     fig._allen_widgets = keep  # extra strong ref on the figure
     refresh_image()
-    fig.text(0.78, 0.115, "compare = cyan(similarity) + magenta(affine)\nSave dir:\n" + sess_dir, fontsize=7)
+    fig.text(0.78, 0.10, "compare = cyan(similarity) + magenta(affine)\n"
+             "Del key = remove pt under cursor\nSave dir:\n" + sess_dir, fontsize=7)
     plt.show()
 
 
@@ -384,7 +446,13 @@ def selftest():
         d = json.loads(open(fn).read())
         assert d["transform_type"] == ttype, d.get("transform_type")
         assert {"landmarks", "landmarks_im", "landmarks_match", "transform", "bregma_offset", "resolution"} <= set(d)
-        print(f"saved {ttype} JSON OK keys={sorted(d)}")
+        # load round-trip: landmarks_match -> points must match what we saved
+        lm = d["landmarks_match"]
+        reloaded = {nm: (float(x), float(y)) for nm, x, y in zip(lm["name"], lm["x"], lm["y"]) if nm in LM_MM}
+        assert set(reloaded) == set(pts), (set(pts) - set(reloaded))
+        for n in pts:
+            assert abs(reloaded[n][0] - pts[n][0]) < 1e-6 and abs(reloaded[n][1] - pts[n][1]) < 1e-6
+        print(f"saved+reloaded {ttype} JSON OK ({len(reloaded)} pts) keys={sorted(d)}")
     print("SELFTEST PASS")
 
 
