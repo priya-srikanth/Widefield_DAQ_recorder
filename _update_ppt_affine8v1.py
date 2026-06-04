@@ -168,6 +168,20 @@ for title, mc, lab in qc_sessions:
             os.path.join(mc, "motion_qc", f"{lab}_motion_qc.png"), 0.15, 1.35, 12.9)
     qc_added.append(title)
 
+# ---- 4) Photobleaching / LED-drift summary (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+pb_png = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out\photobleach_SUMMARY.png"
+pb_title = "Photobleaching / LED drift across sessions"
+pb_added = False
+if os.path.exists(pb_png) and pb_title not in present:
+    content(pb_title,
+            "415 isosbestic declines ~9-16%/session while 470 functional stays +/-2-3% -> consistent with "
+            "violet-LED drift, not GCaMP bleaching (true bleaching would hit 470 hardest). The 0.1 Hz "
+            "hemo-correction highpass already removes this slow drift.",
+            pb_png, 0.15, 1.7, 12.9)
+    pb_added = True
+
 prs.save(DST)
-print(f"swapped {swapped} map pictures; appended sections: {added}; QC slides: {qc_added}; slides now {len(prs.slides)}")
+print(f"swapped {swapped} map pictures; appended sections: {added}; QC slides: {qc_added}; "
+      f"photobleach: {pb_added}; slides now {len(prs.slides)}")
 print(f"backup at {DST}.bak")
