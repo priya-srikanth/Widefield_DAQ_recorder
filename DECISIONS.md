@@ -170,6 +170,24 @@ newer Python compiles the extension from source (see the script header).
   `--mode`) on the GPU box.
 - `wfield_local/roi_activity.py` — CPU Allen-area ROI traces (region-averaged ΔF/F)
   + optional cue/lick per-region responses; lightweight baseline alongside LocaNMF.
+- `wfield_local/quiet_periods.py` — quiet-period (not running/licking/peri-reward)
+  per-frame mask for behavior-controlled baseline F0; ported from the
+  stroke_orofacial_pipeline `find_quiet_bouts`, adapted for one spout.
+
+## Quiet-period baseline (and params to tune later)
+
+Trial-triggered acquisition records no true inter-trial rest, so for a behavior-
+controlled baseline we detect "quiet" frames within the recording (not running, not
+near a lick, not peri-reward) and intersect with the pre-cue ENL window (or pool as
+F0). Logic is ported from the stroke pipeline (`find_quiet_bouts`). Two rig-specific
+decisions: (1) **grooming OFF by default** — the stroke detector needs two spouts
+(bilateral conjunction); single-spout long-touch is unreliable because a true long
+lick at our close spouts also looks long. (2) **thresholds are provisional** —
+running/quiet speed, min durations, and lick/reward/treadmill buffers are stroke
+defaults (the 8 s reward buffer is generous for short ENL); **tune per rig/task**,
+ideally validated against DLC/FaceRhythm movement (the future movement regressor) —
+not yet available. Done on the `quiet-period-baseline` branch to avoid colliding with
+the GPU machine's LocaNMF work on `main`.
 - `run_wfield_local` — added `--detrend-order` and exposed `--freq-highpass` /
   `--freq-lowpass` (the default 0.1 Hz highpass already removes the slow 415 LED
   drift; detrend is for when a gentler highpass is wanted).
