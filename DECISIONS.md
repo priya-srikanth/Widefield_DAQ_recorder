@@ -155,11 +155,42 @@ kickoff (clone repo → set up torch+locanmf env matching the GPU's CUDA → rea
 newer Python compiles the extension from source (see the script header).
 
 **Run log (2026-06-04, RTX 4060 box):** see `GPU_LOCANMF_RUNLOG.md` for the env recipe
-that worked (py3.10 + torch 2.6.0+cu124 + wfield 0.6.0 + pure-Python locanmf), the 3
+that worked (py3.10 + torch 2.6.0+cu124 + wfield 0.6.0 + locanmf-from-source), the 3
 torch-compatibility patches modern torch needs (`wfield_local/locanmf_torch_compat.patch`),
-the `M:` (not `N:`) drive mapping on that machine, and the decision to defer the `cuhals`
-CUDA kernel (no MSVC C++ workload installed; it is a pure speed optimization and does not
-change results).
+the `M:` (not `N:`) drive mapping on that machine, and the `cuhals` CUDA-kernel build
+(MSVC v143 + CUDA 12.4; `wfield_local/locanmf_cuhals_win_build.patch`) which gives ~5×
+faster runs with equivalent results.
+
+### LocaNMF parameters (decided 2026-06-04): `r2_thresh=0.95, loc_thresh=80, maxrank=20`
+
+Chosen from a 2×2 sweep (`r2_thresh` ∈ {0.95, 0.99} × `loc_thresh` ∈ {70, 80}) on **PS94 6/3
+and PS95 6/3** (`wfield_local/sweep_locanmf.py`; kill-safe/resumable). Decision driven by a
+per-component **localization metric** = fraction of a component's spatial energy inside its
+seed Allen region (artifacts — vessels/midline-sinus/FOV-edge/OB — are *delocalized*, so they
+score low; real region-anchored components score high).
+
+- **`loc_thresh=80` is the artifact knob and a near-free cleanup.** It is LocaNMF's target on
+  the in-region energy fraction (ramps the per-component spatial-locality penalty λ until met).
+  Raising 70→80 removed the low-localization artifact tail while barely changing component
+  count: PS94 6/3 → median loc 83 %, **0** components <50 % (vs 5 at loc70); PS95 6/3 → median
+  89 %, **0** components <30 % (vs 13×<50 % at loc70). Well-localized components already clear
+  the bar, so only the bleed/vessel components are affected.
+- **`r2_thresh=0.95` over 0.99.** 0.99 over-splits (near-duplicate pairs + noise-fitting in
+  large regions): PS95 6/3 r2=0.99/loc70 gave 223 components with 63 delocalized (<50 %)
+  artifacts. 0.95 captures the same structure with far less junk; over-splitting is also
+  separable post-hoc by the localization metric, so 0.95 is the safe default.
+- **Bilateral patterns are preserved**, not lost. The atlas seeds each hemisphere separately,
+  so bilateral activity = a homotopic L/R **pair of unilateral components with correlated
+  temporal traces** (recover via trace correlation or summing the two maps), never a single
+  bilateral spatial map — true at any `loc_thresh`. `loc_thresh=80` does **not** decorrelate
+  the hemispheres; cleaner per-hemisphere traces make bilateral synchrony measured *better*
+  (PS94 6/3 SSp-m L/R trace r: 0.35 at loc70 → 0.85 at loc80). The split representation also
+  reveals lateralization (PS94 6/3: SSp orofacial-sensory bilateral ~0.8; MOp/MOs motor
+  lateralized ~0.4) that a forced-bilateral component would mask.
+
+QC per run: two montages (`*_components.png` region-ordered + `*_components_byenergy.png`
+energy-ranked, auto-emitted by `run_locanmf.py` via `wfield_local/montage_by_energy.py`) plus
+the localization metric. Outputs go to a new `locanmf_*` subfolder; nothing prior overwritten.
 
 ## Significant local-analysis modules (added during this work)
 
