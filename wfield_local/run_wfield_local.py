@@ -18,6 +18,25 @@ from wfield.hemocorrection import hemodynamic_correction
 from wfield.io import mmap_dat
 
 
+def _detrend_svt(svt: np.ndarray, order: int) -> np.ndarray:
+    """Remove a slow polynomial trend from each temporal component.
+
+    ``svt`` is (k, ntime) for one channel. We fit an ``order``-degree polynomial
+    in (normalized) time to every component and subtract it. Because the movie is
+    U @ SVT, this removes U @ (per-component trend) -- a spatially-structured slow
+    drift -- which is where the LED dimming lives (mostly the first components).
+    Operates per channel, upstream of the hemodynamic regression.
+    """
+    if order < 1:
+        return svt
+    n = svt.shape[1]
+    x = np.linspace(-1.0, 1.0, n)
+    V = np.vander(x, order + 1)                      # (n, order+1)
+    coef, *_ = np.linalg.lstsq(V, svt.T, rcond=None)  # (order+1, k)
+    trend = (V @ coef).T                              # (k, n)
+    return (svt - trend).astype("float32")
+
+
 def _mean_by_chunks(dat, chunk_size: int) -> np.ndarray:
     total = np.zeros(dat.shape[1:], dtype=np.float64)
     n = 0
@@ -49,6 +68,27 @@ def main() -> int:
     parser.add_argument("--nframes-per-chunk", type=int, default=500)
     parser.add_argument("--baseline-chunk-size", type=int, default=256)
     parser.add_argument("--skip-correction", action="store_true")
+    parser.add_argument(
+        "--freq-highpass",
+        type=float,
+        default=0.1,
+        help="Hemo-correction highpass cutoff (Hz), applied to both channels. "
+        "Default 0.1 already removes slow LED drift. Set <=0 to disable.",
+    )
+    parser.add_argument(
+        "--freq-lowpass",
+        type=float,
+        default=14.0,
+        help="Hemo-correction lowpass cutoff (Hz) on the isosbestic. Set <=0 to disable.",
+    )
+    parser.add_argument(
+        "--detrend-order",
+        type=int,
+        default=0,
+        help="Polynomial detrend order applied per temporal component, per channel, "
+        "BEFORE the hemodynamic regression (0=off). Use with a lowered --freq-highpass "
+        "to remove slow LED drift while preserving slow neural signal (e.g. order 2-3).",
+    )
     args = parser.parse_args()
 
     args.output.mkdir(parents=True, exist_ok=True)
@@ -96,11 +136,22 @@ def main() -> int:
         print("Running hemodynamic correction...", flush=True)
         svt_470 = SVT[:, args.functional_channel :: 2]
         svt_415 = SVT[:, (args.functional_channel + 1) % 2 :: 2]
-        SVTcorr, rcoeffs, T = hemodynamic_correction(U, svt_470, svt_415, fs=args.fs)
+        if args.detrend_order >= 1:
+            print(f"Polynomial detrend (order {args.detrend_order}) per channel...", flush=True)
+            svt_470 = _detrend_svt(svt_470, args.detrend_order)
+            svt_415 = _detrend_svt(svt_415, args.detrend_order)
+        hp = args.freq_highpass if args.freq_highpass and args.freq_highpass > 0 else None
+        lp = args.freq_lowpass if args.freq_lowpass and args.freq_lowpass > 0 else None
+        SVTcorr, rcoeffs, T = hemodynamic_correction(
+            U, svt_470, svt_415, fs=args.fs, freq_highpass=hp, freq_lowpass=lp
+        )
         np.save(args.output / "SVTcorr.npy", SVTcorr)
         np.save(args.output / "rcoeffs.npy", rcoeffs)
         np.save(args.output / "T.npy", T)
         summary["SVTcorr_shape"] = list(SVTcorr.shape)
+        summary["freq_highpass"] = hp
+        summary["freq_lowpass"] = lp
+        summary["detrend_order"] = args.detrend_order
         print(f"Saved SVTcorr {SVTcorr.shape}", flush=True)
 
     (args.output / "local_wfield_summary.json").write_text(
