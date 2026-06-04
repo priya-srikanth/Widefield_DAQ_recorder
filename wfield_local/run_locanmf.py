@@ -62,6 +62,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from wfield_local.montage_by_energy import save_energy_montage
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -141,6 +143,10 @@ def main() -> int:
         fig.tight_layout()
         png = args.output / f"{tag}_components.png"
         fig.savefig(png, dpi=120); plt.close(fig)
+        # complementary montage: same components ordered by descending energy (importance rank)
+        epng = args.output / f"{tag}_components_byenergy.png"
+        save_energy_montage(A, C, regions, epng, title=f"{tag} components by energy rank (n={ncomp})")
+        print("wrote", epng, flush=True)
         uniq, counts = np.unique(regions, return_counts=True)
         (args.output / f"{tag}_summary.json").write_text(json.dumps({
             "label": args.label, "mode": mode, "allen_dir": str(ad), "svt": str(svt_path),
@@ -148,7 +154,7 @@ def main() -> int:
             "params": {"minrank": args.minrank, "maxrank": maxrank, "min_pixels": args.min_pixels,
                        "loc_thresh": loc_thresh, "r2_thresh": args.r2_thresh,
                        "nonnegative_temporal": args.nonnegative_temporal, "device": args.device},
-            "outputs": [f"{tag}_A.npy", f"{tag}_C.npy", f"{tag}_regions.npy", png.name],
+            "outputs": [f"{tag}_A.npy", f"{tag}_C.npy", f"{tag}_regions.npy", png.name, epng.name],
             "note": "A: (H,W,ncomp) spatial maps (NaN outside brain); C: (ncomp,T) temporal; "
                     "regions: seed label per component. snmf = whole-brain seed (global networks); "
                     "locanmf = atlas-seeded localized.",

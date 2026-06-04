@@ -75,6 +75,17 @@ an hour at a steady ~80–88 % GPU / one saturated CPU core (kernel-launch bound
 needed: build `cuhals`, lower `--maxrank` (e.g. 12–15), or subsample frames. The large frame
 count (T≈90 k, ~48 min recording) is the main driver.
 
+## Component montages: region-ordered + energy-ranked
+`run_locanmf.py` writes two montages of the same components:
+- `<tag>_components.png` — ordered by **Allen region** (seed label); good for anatomy.
+- `<tag>_components_byenergy.png` — ordered by **descending component energy**
+  `||A_i||_F * ||C_i||_2` (importance rank), strongest first. Emitted via
+  `wfield_local/montage_by_energy.py`, which is pure post-processing of the saved
+  `A`/`C`/`regions` (no recompute) and can backfill existing dirs:
+  `python -m wfield_local.montage_by_energy <output_dir> <tag>`.
+The raw component array (and `regions.npy`) stays region-grouped, ascending by seed
+label; the energy view is just a re-plot, it does not reorder the saved arrays.
+
 ## Runtime / launch tip
 Launch the run so stdout streams to a log (e.g. `*> run.log 2>&1`), **not** through
 PowerShell `| Out-String`, which buffers all of locanmf's per-rank-iteration progress prints
