@@ -70,8 +70,13 @@ def main() -> int:
     ap.add_argument("--svt", type=Path, default=None, help="SVTcorr.npy (default: <allen-dir>/../SVTcorr.npy then /../../)")
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--label", required=True)
+    ap.add_argument("--mode", choices=("locanmf", "snmf", "both"), default="locanmf",
+                    help="locanmf = atlas-seeded localized components (reproducible, region-anchored); "
+                         "snmf = whole-brain seed (global correlation-network components); both = run each")
     ap.add_argument("--minrank", type=int, default=1)
-    ap.add_argument("--maxrank", type=int, default=20, help="max components per region (~10-20)")
+    ap.add_argument("--maxrank", type=int, default=20, help="LocaNMF max components per region (~10-20)")
+    ap.add_argument("--snmf-maxrank", type=int, default=200, help="sNMF total components (whole-brain seed)")
+    ap.add_argument("--snmf-loc-thresh", type=float, default=1.0, help="sNMF localization (~1 = global)")
     ap.add_argument("--min-pixels", type=int, default=100)
     ap.add_argument("--loc-thresh", type=float, default=70.0, help="%% of component area kept inside the atlas region")
     ap.add_argument("--r2-thresh", type=float, default=0.99, help="fraction of variance to capture")
@@ -110,52 +115,55 @@ def main() -> int:
 
     from wfield.local_nmf import compute_locaNMF  # needs locanmf + torch installed
 
-    A, C, regions = compute_locaNMF(
-        U.astype(np.float32), V.astype(np.float32),
-        atlas.astype(np.int32), brain_mask,
-        minrank=args.minrank, maxrank=args.maxrank, min_pixels=args.min_pixels,
-        loc_thresh=args.loc_thresh, r2_thresh=args.r2_thresh,
-        nonnegative_temporal=args.nonnegative_temporal, device=args.device,
-    )
-    A = np.asarray(A); C = np.asarray(C); regions = np.asarray(regions)
-    ncomp = A.shape[2]
-    print(f"[{args.label}] LocaNMF -> A{A.shape} C{C.shape} regions{regions.shape} ({ncomp} components)", flush=True)
+    # sNMF = whole-brain seed (no localization); LocaNMF = atlas-seeded localized.
+    runs = []
+    if args.mode in ("locanmf", "both"):
+        runs.append(("locanmf", atlas.astype(np.int32), args.maxrank, args.loc_thresh))
+    if args.mode in ("snmf", "both"):
+        runs.append(("snmf", brain_mask.astype(np.int32), args.snmf_maxrank, args.snmf_loc_thresh))
 
-    np.save(args.output / f"{args.label}_locanmf_A.npy", A.astype(np.float32))
-    np.save(args.output / f"{args.label}_locanmf_C.npy", C.astype(np.float32))
-    np.save(args.output / f"{args.label}_locanmf_regions.npy", regions)
+    def _save(mode, A, C, regions, maxrank, loc_thresh):
+        A = np.asarray(A); C = np.asarray(C); regions = np.asarray(regions); ncomp = A.shape[2]
+        tag = f"{args.label}_{mode}"
+        print(f"[{args.label}] {mode} -> A{A.shape} C{C.shape} ({ncomp} components)", flush=True)
+        np.save(args.output / f"{tag}_A.npy", A.astype(np.float32))
+        np.save(args.output / f"{tag}_C.npy", C.astype(np.float32))
+        np.save(args.output / f"{tag}_regions.npy", regions)
+        ncol = 8; nrow = int(np.ceil(max(ncomp, 1) / ncol))
+        fig, axes = plt.subplots(nrow, ncol, figsize=(2.0 * ncol, 2.0 * nrow), squeeze=False)
+        for i in range(nrow * ncol):
+            ax = axes[i // ncol, i % ncol]; ax.set_axis_off()
+            if i < ncomp:
+                m = A[:, :, i]; lim = np.nanpercentile(np.abs(m), 99) or 1.0
+                ax.imshow(m, cmap="magma", vmin=0, vmax=lim)
+                ax.set_title(f"#{i} reg {int(regions[i])}", fontsize=7)
+        fig.suptitle(f"{tag} components (n={ncomp}, maxrank={maxrank}, loc_thresh={loc_thresh})")
+        fig.tight_layout()
+        png = args.output / f"{tag}_components.png"
+        fig.savefig(png, dpi=120); plt.close(fig)
+        uniq, counts = np.unique(regions, return_counts=True)
+        (args.output / f"{tag}_summary.json").write_text(json.dumps({
+            "label": args.label, "mode": mode, "allen_dir": str(ad), "svt": str(svt_path),
+            "n_components": int(ncomp), "components_per_region": {int(r): int(c) for r, c in zip(uniq, counts)},
+            "params": {"minrank": args.minrank, "maxrank": maxrank, "min_pixels": args.min_pixels,
+                       "loc_thresh": loc_thresh, "r2_thresh": args.r2_thresh,
+                       "nonnegative_temporal": args.nonnegative_temporal, "device": args.device},
+            "outputs": [f"{tag}_A.npy", f"{tag}_C.npy", f"{tag}_regions.npy", png.name],
+            "note": "A: (H,W,ncomp) spatial maps (NaN outside brain); C: (ncomp,T) temporal; "
+                    "regions: seed label per component. snmf = whole-brain seed (global networks); "
+                    "locanmf = atlas-seeded localized.",
+        }, indent=2))
+        print("wrote", png, flush=True)
 
-    # component montage
-    ncol = 8
-    nrow = int(np.ceil(ncomp / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(2.0 * ncol, 2.0 * nrow), squeeze=False)
-    for i in range(nrow * ncol):
-        ax = axes[i // ncol, i % ncol]; ax.set_axis_off()
-        if i < ncomp:
-            m = A[:, :, i]
-            lim = np.nanpercentile(np.abs(m), 99) or 1.0
-            ax.imshow(m, cmap="magma", vmin=0, vmax=lim)
-            ax.set_title(f"#{i} reg {int(regions[i])}", fontsize=7)
-    fig.suptitle(f"{args.label} LocaNMF components (n={ncomp}, maxrank={args.maxrank}, loc_thresh={args.loc_thresh})")
-    fig.tight_layout()
-    png = args.output / f"{args.label}_locanmf_components.png"
-    fig.savefig(png, dpi=120); plt.close(fig)
-
-    uniq, counts = np.unique(regions, return_counts=True)
-    summary = {
-        "label": args.label, "allen_dir": str(ad), "svt": str(svt_path), "output": str(args.output),
-        "n_components": int(ncomp), "components_per_region": {int(r): int(c) for r, c in zip(uniq, counts)},
-        "params": {"minrank": args.minrank, "maxrank": args.maxrank, "min_pixels": args.min_pixels,
-                   "loc_thresh": args.loc_thresh, "r2_thresh": args.r2_thresh,
-                   "nonnegative_temporal": args.nonnegative_temporal, "device": args.device},
-        "outputs": [f"{args.label}_locanmf_A.npy", f"{args.label}_locanmf_C.npy",
-                    f"{args.label}_locanmf_regions.npy", str(png.name)],
-        "note": "A: (H,W,ncomp) localized spatial maps (NaN outside brain); C: (ncomp,T) temporal; "
-                "regions: Allen region label per component.",
-    }
-    (args.output / f"{args.label}_locanmf_summary.json").write_text(json.dumps(summary, indent=2))
-    print(json.dumps(summary, indent=2), flush=True)
-    print("wrote", png, flush=True)
+    for mode, atlas_arg, maxrank, loc_thresh in runs:
+        print(f"[{args.label}] running {mode}: maxrank={maxrank} loc_thresh={loc_thresh}", flush=True)
+        A, C, regions = compute_locaNMF(
+            U.astype(np.float32), V.astype(np.float32), atlas_arg, brain_mask,
+            minrank=args.minrank, maxrank=maxrank, min_pixels=args.min_pixels,
+            loc_thresh=loc_thresh, r2_thresh=args.r2_thresh,
+            nonnegative_temporal=args.nonnegative_temporal, device=args.device,
+        )
+        _save(mode, A, C, regions, maxrank, loc_thresh)
     return 0
 
 

@@ -64,8 +64,12 @@ python -m wfield_local.run_locanmf `
   --allen-dir "N:\MICROSCOPE\Priya\Widefield\labcams\20260603\PS94_20260603\motion_corrected\wfield_local_results\allen_aligned_affine8v1" `
   --label PS94_0603 `
   --output  "N:\MICROSCOPE\Priya\Widefield\labcams\20260603\PS94_20260603\motion_corrected\locanmf_affine8v1" `
-  --maxrank 20 --loc-thresh 70 --r2-thresh 0.99 --device auto
+  --mode both --maxrank 20 --loc-thresh 70 --r2-thresh 0.99 --device auto
 ```
+`--mode both` runs **LocaNMF** (atlas-seeded, region-anchored, reproducible across
+animals) AND **sNMF** (whole-brain seed -> global correlation-network components),
+writing `*_locanmf_*` and `*_snmf_*` outputs. Use `--mode locanmf` for just the
+region-anchored one.
 Inputs it reads (already present in each `allen_aligned_affine8v1` + its results dir):
 `U_atlas.npy`, `allen_area_atlas_native_grid.npy`, `allen_brain_mask_native_grid.npy`,
 `SVTcorr.npy`. Outputs: `*_locanmf_A.npy` (H,W,ncomp spatial), `*_locanmf_C.npy`
