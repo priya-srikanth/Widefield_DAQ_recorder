@@ -80,6 +80,7 @@ Diagnostics and utilities:
 - `labcams_ps/` - small repo-owned wrapper around upstream `labcams` that adds opt-in offline PCO GUI launch behavior without modifying the installed upstream package.
 - `wfield_local/` - local widefield processing helpers for motion correction, SVD/hemodynamic correction, Allen alignment, cue/lick-aligned plots, alignment diagnostics, and NeuroCAAS compatibility launch.
 - `requirements.txt` - Python package dependencies.
+- `DECISIONS.md` - analysis decisions log (global vs session-specific): transforms, event→frame mapping regimes, functional-channel notes, photobleaching/LED drift, cross-day/cross-animal alignment, SVD-vs-LocaNMF, raw-data archive location.
 - `.gitignore` - excludes HDF5 recordings, Python caches, logs, and local environment folders.
 
 ## Install Dependencies
@@ -217,14 +218,20 @@ The wrapper does not modify the installed `wfield` package. It only coerces PyQt
 
 See [wfield_local/README.md](wfield_local/README.md) for local processing instructions covering:
 
-- motion correction
-- SVD and dual-color hemodynamic correction
-- Allen landmark alignment
-- cue-aligned spout-position maps
-- shared-scale figure regeneration
+- motion correction (+ optional motion-correction QC, `qc_motion_correction.py`)
+- SVD and dual-color hemodynamic correction (with optional `--detrend-order` / exposed `--freq-highpass`/`--freq-lowpass`)
+- Allen landmark alignment (shared outline helper `atlas_overlay.py`)
+- cue-aligned spout-position maps + post-pre delta; shared-scale figure regeneration
+- post-lick 150 ms maps and delta-position contrasts by spout position
+- cue/lick maps for relabeled "cleanpairs" movies (`framemap_event_maps.py`)
+- within-animal cross-day alignment on the mean 470 nm vasculature (`cross_day_align.py`)
 - alignment diagnostics and comparison PowerPoints
-- post-lick 150 ms maps by spout position
 - imported sync-pulse and hysteresis lick-detection helpers from the stroke/orofacial workflow
+
+Analysis design choices (global vs session-specific, event→frame mapping regimes,
+functional-channel notes, photobleaching/LED drift, cross-day/cross-animal alignment
+policy, and the SVD-vs-LocaNMF decomposition decision) are recorded in
+[DECISIONS.md](DECISIONS.md).
 
 ## Timing Notes
 

@@ -79,7 +79,77 @@ highpass already removes this slow drift, so it does not contaminate ΔF/F.
 `run_wfield_local` also exposes `--detrend-order` + `--freq-highpass` for cases
 where a gentler highpass is wanted (keep slow signal, still remove LED drift).
 
+## Decomposition: SVD + atlas now; PMD/LocaNMF not yet
+
+Our local pipeline (`run_wfield_local`) does **SVD** (wfield `approximate_svd`,
+mean-centered ΔF/F, `divide_by_average=True`, k≈100) → **hemodynamic correction in
+SVD space** → **Allen landmark alignment**. Activity maps are `U @ SVTcorr` averaged
+over event windows. We do **NOT** currently run **PMD** (penalized matrix
+decomposition denoising) or **LocaNMF** (localized semi-NMF), which the wfield /
+NeuroCAAS protocol (Couto et al., *Nat Protoc* — PMC8788140) recommends as the next
+steps after SVD: PMD denoises/compresses, then LocaNMF re-factorizes the low-rank
+data into **non-negative, anatomically-localized components anchored to Allen
+regions** (Saxena et al., *PLoS Comput Biol* 2020, pcbi.1007791). Versus raw SVD
+components (delocalized, not reproducible across sessions), LocaNMF components are
+interpretable and **reproducible across sessions and animals** — the natural unit
+for cross-animal and functional-subnetwork analyses (e.g. Nat Neurosci
+s41593-022-01245-9).
+
+Decision: stay on SVD + atlas for evoked maps and within-animal work (adequate).
+Add LocaNMF when we move to cross-animal / subnetwork analysis. Constraint: this
+machine has **no CUDA GPU and no torch/locanmf installed**; LocaNMF is GPU-oriented,
+so the practical paths are (a) **NeuroCAAS cloud** (the intended wfield route; we
+have `wfield_local/wfield_ncaas_fixed.py`), or (b) a GPU box with `locanmf`+`torch`.
+LocaNMF consumes exactly what we already produce (low-rank `U`/`SVTcorr` + the
+`allen_area_atlas_native_grid` atlas), so it is a clean bolt-on.
+
+## Cross-day and cross-animal alignment policy
+
+- **Within animal, across days**: register the motion-corrected **mean 470 nm
+  vasculature** to a single chosen reference session (`cross_day_align.py`):
+  landmark-init → intensity-based ECC affine refine (SIFT+RANSAC fallback),
+  composed into the reference/CCF frame. Vasculature is a far denser, more
+  repeatable fiducial than the ~8 landmarks, whose independent per-session errors
+  otherwise compound day-to-day. Keep the **same ROI/zoom** across days (full-FOV↔ROI
+  pairs register poorly). QC = masked NCC + red/green vessel overlay.
+- **Across animals**: vasculature is not shared, so the **only** common frame is the
+  Allen atlas (landmarks). Compare at the **ROI / Allen-area level** (or via LocaNMF
+  components), not pixelwise; group pixel maps are for visualization only.
+
+## Outline rendering fix (atlas overlay)
+
+Region outlines are now drawn by the shared `wfield_local/atlas_overlay.region_edges`
+(used by all plot modules). The earlier per-module version marked only the upper/left
+pixel of each label transition then masked to labeled pixels, dropping the brain's
+**left and anterior (top) outer borders** (the open left-anterior / olfactory-bulb
+edge). The shared version marks both pixels of each transition before masking, so the
+outline closes all around (verified left border 96/524 → 524/524).
+
+## Raw-data standby / archive
+
+Original, un-motion-corrected `raw_widefield_data` `.dat` files (and the 6/1 full-FOV
+session files) are archived to **`M:\Widefield\labcams_raw_data\<date>\<animal>\`**.
+Only the raw camera `.dat` is archived — not camlogs, `*_cleanpairs_*`/`motioncorrect_*`
+files, or analysis outputs. Copy first, verify sizes, confirm, then delete the E:
+originals.
+
+## Significant local-analysis modules (added during this work)
+
+- `wfield_local/atlas_overlay.py` — shared region-outline helper (the fix above).
+- `wfield_local/framemap_event_maps.py` — cue/lick maps for **relabeled cleanpairs**
+  movies (regime B), generalizing the one-off `_ps92_spout/_ps92_lick`; emits the
+  same filenames as the stock plotters so downstream contrast/mean/cue-vs-lick steps
+  are reused. `chosen_exposure_offset` is read per session.
+- `wfield_local/qc_motion_correction.py` — per-session motion-correction QC (shift
+  traces + magnitude histogram, raw-vs-corrected sharpness, residual-motion std,
+  pass/warn verdict).
+- `wfield_local/cross_day_align.py` — within-animal cross-day vasculature registration
+  (above).
+- `run_wfield_local` — added `--detrend-order` and exposed `--freq-highpass` /
+  `--freq-lowpass` (the default 0.1 Hz highpass already removes the slow 415 LED
+  drift; detrend is for when a gentler highpass is wanted).
+
 ## Things still to verify
 
 - 6/3 PS92 / PS95 functional-channel identity (PS94 6/3 was verified correct).
-- 6/3 PS94 & PS95 SVD completion before their maps can be made.
+  (6/3 PS94 & PS95 SVD + maps + QC are now complete and in the deck.)

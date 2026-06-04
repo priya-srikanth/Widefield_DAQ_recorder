@@ -11,12 +11,16 @@ cd "C:\Github\Widefield_DAQ_recorder"
 
 ## Processing Overview
 
-1. Motion-correct the labcams `.dat` file.
+1. Motion-correct the labcams `.dat` file (optionally QC it, §13).
 2. Run local SVD and dual-color hemodynamic correction.
 3. Apply Allen/wfield landmark alignment.
-4. Generate cue-aligned spout-position maps.
+4. Generate cue-aligned spout-position maps (relabeled sessions: §12).
 5. Generate optional alignment diagnostics and comparison PowerPoints.
 6. Generate optional lick-aligned post-event maps.
+7. Optionally align the same animal across days on the mean 470 nm vasculature (§14).
+
+> Decomposition stops at SVD + hemo + atlas here; PMD/LocaNMF are not run locally
+> (see the "Decomposition note" at the bottom and `DECISIONS.md`).
 
 Large outputs should stay in the recording folder, usually under:
 
@@ -85,9 +89,13 @@ python .\wfield_local\run_wfield_local.py `
 
 Important adjustable parameters:
 
-- `--functional-channel 1`: for this rig, channel 0 is 415 nm and channel 1 is 470 nm, so 470 is the functional channel.
+- `--functional-channel 1`: for this rig, channel 0 is 415 nm and channel 1 is 470 nm, so 470 is the functional channel. (PS92 6/2 rescue was recorrected with `--functional-channel 0` after a swap.)
 - `--n-components`: SVD component count. `100` has been used for PS94/PS95.
 - Chunk/memory parameters in the script can be adjusted if a computer runs out of RAM.
+- `--freq-highpass` / `--freq-lowpass`: hemo-correction filter cutoffs (defaults 0.1 / 14 Hz). The default 0.1 Hz highpass already removes the slow 415 nm LED drift, so it does not leak into ΔF/F.
+- `--detrend-order N`: optional per-component polynomial detrend (per channel) applied before the β regression. Use with a lowered `--freq-highpass` to strip slow LED drift while keeping slow neural signal. Default off; the running pipeline behavior is unchanged.
+
+> The activity maps are `U @ SVTcorr` averaged over an event window, in **fractional ΔF/F** relative to the **session-mean image** (`divide_by_average=True`), hemo-corrected and high-pass filtered. The cue figure's `post-pre` delta is the baselined evoked map; the lick maps are post-only (vs session mean), so treat them as activity relative to session mean unless a pre-lick baseline is added.
 
 Outputs include:
 
@@ -415,6 +423,74 @@ This maps corrected imaging frames to DAQ samples through the DAQ-recorded
 `pco_exposure` pulse train, then averages `SVTcorr` frames classified as
 running versus not running. Treat `--offset-v auto` as a QC convenience; for
 final analysis, prefer the legacy default or a known rig/session override.
+
+## 12. Relabeled (cleanpairs) cue/lick maps
+
+For trial-gated recordings relabeled with `--relabel-mode rescue`, the corrected
+movie is a non-contiguous subset of kept 415/470 pairs, so the stock plotters'
+`raw//2` event→frame mapping is wrong. `framemap_event_maps.py` maps each event to
+the nearest kept corrected frame via the cleanpairs frame map + DAQ `pco_exposure`
+pulses (`chosen_exposure_offset` read from the `*_cleanpairs_summary.json`), and
+writes the **same filenames/npz keys** as the stock plotters, so the downstream
+`plot_spout_position_contrasts`, `plot_lick_position_contrasts`, and
+`plot_lick_vs_cue_spout_maps` steps run unchanged.
+
+```powershell
+python -m wfield_local.framemap_event_maps --what cue `
+  --daq-h5 <session.h5> --wfield-results <...\wfield_local_results> `
+  --allen-dir <...\allen_aligned_*> --frame-map <...\*_cleanpairs_frame_map.npz> `
+  --cleanpairs-summary <...\*_cleanpairs_summary.json> --output <...\spout_trial_averages_*> --label <LABEL>
+# --what lick  (add --post-s 0.15) for the post-lick maps
+```
+
+Full-FOV (non-relabeled) sessions still use the stock `plot_spout_trial_averages` /
+`plot_lick_aligned_averages` with `--frame-align pco`.
+
+## 13. Motion-Correction QC
+
+`qc_motion_correction.py` reads the saved per-frame shifts and the pre/post movies
+and emits one QC figure (shift traces + magnitude histogram, mean-image sharpness
+raw vs corrected, corrected temporal-std residual-motion image) plus a pass/warn
+JSON. Verdict comes from the shift distribution; the sharpness ratio only downgrades
+when there was real motion to remove (sub-pixel sessions are not penalized for warp
+interpolation softening).
+
+```powershell
+python -m wfield_local.qc_motion_correction `
+  --motion-dir "E:\labcams_data\...\motion_corrected" --label <LABEL> `
+  --output "E:\labcams_data\...\motion_corrected\motion_qc"
+```
+
+## 14. Cross-Day Alignment (within animal)
+
+Register each day's motion-corrected **mean 470 nm vasculature** to one reference
+session so all days share the reference/CCF frame (`cross_day_align.py`). The
+reference is CCF-aligned by its landmarks; other days are landmark-initialized then
+refined by intensity-based ECC affine (SIFT+RANSAC fallback), with a greedy
+keep-best on masked NCC so refinement never worsens the init. Outputs a red/green
+vessel-overlay QC + NCC table + per-session transforms; `"warp_u": true` also warps
+each day's `U` into the common frame.
+
+```powershell
+python -m wfield_local.cross_day_align config.json
+```
+
+Config (one per animal): `{"animal","func_channel","reference","output","warp_u",
+"sessions":{"<id>":{"results":"...wfield_local_results","landmarks":"...v1.json",
+"func_channel":<optional override>}, ...}}`. Keep the same ROI/zoom across days
+(full-FOV↔ROI pairs register poorly). Across **animals**, vasculature is not shared —
+use CCF/landmarks + Allen-area (ROI) or LocaNMF-component comparison instead.
+
+## Decomposition note: SVD vs LocaNMF
+
+This local pipeline stops at **SVD + hemodynamic correction + Allen alignment**. It
+does **not** run **PMD** denoising or **LocaNMF** (localized semi-NMF), which the
+wfield/NeuroCAAS protocol adds after SVD to produce anatomically-localized,
+cross-session/animal-reproducible components. For evoked maps and within-animal work,
+SVD + atlas is adequate; for cross-animal / functional-subnetwork analysis, add
+LocaNMF (runs on the existing low-rank `U`/`SVTcorr` + the `allen_area_atlas`). It is
+GPU-oriented and not installed here — use NeuroCAAS (`wfield_ncaas_fixed.py`) or a GPU
+machine. See `DECISIONS.md`.
 
 ## NeuroCAAS Compatibility Launcher
 
