@@ -1054,18 +1054,36 @@ def _patch_gui_docks() -> None:
 
         def clear_reference():
             cw = current_widget()
-            # Robust clear: drop the reference and force a redraw so the overlay
-            # disappears even if preview is paused (works regardless of whether a
-            # reference was loaded via this dock or the right-click action).
+            # Null the reference + uncheck (no signal fired), then FORCE an
+            # immediate plain repaint. The previous approach relied on the next
+            # live frame to repaint, which failed when the preview wasn't streaming
+            # a non-zero frame (e.g. camera not exposing between trials): the
+            # overlay renders R=reference, G=live, so with live ~0 (and a possible
+            # 0/0 NaN in frame/np.max(frame)) the screen showed only the red
+            # reference -> "whole screen red". Painting a plain frame directly
+            # clears it regardless of streaming state.
             if hasattr(cw, "_ps_set_reference"):
                 cw._ps_set_reference(None)
             else:
                 cw.parameters["reference_channel"] = None
                 cw.lastnFrame = -1
             try:
-                cw.update()
+                if hasattr(cw.cam, "excitation_trigger"):
+                    fb = cw.cam.get_img_with_virtual_channels()
+                else:
+                    fb = cw.cam.get_img()
+                f = np.asarray(fb).squeeze()
+                if f.ndim == 3 and f.shape[2] == 2:  # 415/470 -> G,B (no red)
+                    rgb = np.zeros((f.shape[0], f.shape[1], 3), dtype=f.dtype)
+                    rgb[:, :, 1] = f[:, :, 0]
+                    rgb[:, :, 2] = f[:, :, 1]
+                    f = rgb
+                cw.view.setImage(f, autoLevels=True, autoDownsample=True)
             except Exception:
-                pass
+                try:
+                    cw.update()
+                except Exception:
+                    pass
             status.setText("No reference loaded")
             _display("[labcams_ps] Cleared alignment reference")
 

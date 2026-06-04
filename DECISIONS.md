@@ -267,6 +267,39 @@ regime B) to emit both the raw post-lick map and a `*_quietnorm*` map (post-lick
 the mean quiet-period baseline = lick-evoked relative to the not-running/not-licking
 state). Quiet-period thresholds are provisional (see the quiet-period section).
 
+## 2026-06-04 session issues (PS92 split, PS94 freeze, VS Code auto-update)
+
+**Root cause (both):** VS Code Stable **auto-update** (`CodeSetup-stable-<hash>.exe`,
+an Inno Setup installer) — its dialog is exactly "Setup has detected that Setup is
+currently running…". If labcams + the DAQ recorder are launched from VS Code's
+integrated terminal, a VS Code update restart kills those child processes (force-
+closing both at once). Mitigation: launch labcams/DAQ from a **standalone terminal /
+the `.bat` launchers** (not VS Code's terminal), and set VS Code `"update.mode":"none"`.
+
+**PS94 6/4:** the DAQ "freeze" was display-only — `sample_index_is_contiguous=True`,
+`recording_complete=True`, `closed_at` matches the 77.5-min sample count. NO dropped
+samples (the hardware-clocked NI buffer held through the GUI stall).
+
+**PS92 6/4 (split — needs concatenation):**
+- part1: DAQ `PS92_20260604_133714.h5` + camera `…\PS92_20260604_132934\raw_widefield_data\…`
+  = **30.0 min**, then force-closed (`recording_complete=False`, no `closed_at`; data
+  intact up to crash minus <2 s since last flush).
+- part2 (resumed): DAQ `PS92_20260604_140742.h5` + camera `…\raw_widefield_data_2\…`
+  = **41.3 min** (clean). Camera dims match (2_460_480).
+- **~27 s unrecorded gap** between parts (camera+DAQ both off); the behavior box ran
+  **continuously** (1 uninterrupted behavior session) across the gap.
+
+**Concatenation plan (DEFERRED — camera .dat ~84 GB, heavy I/O; run when rig free):**
+1. Camera: byte-append part1 + part2 `.dat` (same dims) -> combined movie.
+2. DAQ: concatenate analog `samples_int16` + digital `packed_samples` (part1 then
+   part2), record the part boundary sample index + the ~27 s gap in attrs.
+3. Relabel the COMBINED movie (DAQ-based) -> fixes 415/470 parity across the join and
+   drops boundary stray frames; within-part pco<->frame mapping is preserved.
+4. Behavior alignment (later): the ~27 s gap is unrecorded, so align each part to the
+   continuous behavior session via shared DAQ-recorded events (cue / spout_strobe /
+   sync) + `created_at` timestamps, accounting for the gap offset on part2. Doable via
+   timestamps + sync pulses as hoped.
+
 ## Things still to verify
 
 - 6/3 PS92 / PS95 functional-channel identity (PS94 6/3 was verified correct).
