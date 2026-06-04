@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -16,17 +17,28 @@ from wfield.io import mmap_dat
 from wfield.registration import motion_correct
 
 
-def _load_relabel_fn():
-    # Imported lazily (only when --daq-h5 is given) so the common no-relabel path
-    # does not import h5py.
-    try:
-        from .trim_illuminated_labcams import relabel_dat_from_daq
-    except ImportError:  # direct script execution
-        import os
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from trim_illuminated_labcams import relabel_dat_from_daq
-    return relabel_dat_from_daq
+def _run_relabel_subprocess(dat: Path, daq_h5: Path, output: Path, mode: str, led_threshold) -> Path:
+    """Run the TTL relabel in a SEPARATE process and return the relabeled .dat.
+
+    h5py and wfield cannot be imported in the same process on this rig (their
+    HDF5 DLLs conflict), so the relabel (h5py) must run in its own interpreter,
+    separate from motion correction (wfield).
+    """
+    import json as _json
+    import subprocess
+    import sys
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "wfield_local.trim_illuminated_labcams",
+           str(dat), str(daq_h5), "--output-dir", str(output),
+           "--label", "daq_led", "--mode", mode]
+    if led_threshold is not None:
+        cmd += ["--led-threshold", str(led_threshold)]
+    print("[pipeline] TTL relabel (separate process): " + " ".join(cmd), flush=True)
+    subprocess.run(cmd, check=True, cwd=repo_root)
+    summary_path = output / f"{Path(dat).stem}_daq_led_cleanpairs_summary.json"
+    summary = _json.loads(summary_path.read_text(encoding="utf-8"))
+    return Path(summary["output_dat"])
 
 
 def main() -> int:
@@ -70,16 +82,12 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
 
     dat_path = args.dat
-    relabel_summary = None
+    relabeled = False
     if args.daq_h5 is not None:
         print(f"[pipeline] TTL relabel before motion correction (mode={args.relabel_mode})", flush=True)
-        relabel_dat_from_daq = _load_relabel_fn()
-        relabel_summary = relabel_dat_from_daq(
-            args.dat, args.daq_h5, args.output,
-            label="daq_led", mode=args.relabel_mode,
-            led_threshold=args.relabel_led_threshold,
-        )
-        dat_path = Path(relabel_summary["output_dat"])
+        dat_path = _run_relabel_subprocess(
+            args.dat, args.daq_h5, args.output, args.relabel_mode, args.relabel_led_threshold)
+        relabeled = True
         print(f"[pipeline] relabeled DAT -> {dat_path}", flush=True)
 
     dat = mmap_dat(str(dat_path), mode="r")
@@ -124,8 +132,8 @@ def main() -> int:
         "source_dat": str(dat_path),
         "original_dat": str(args.dat),
         "daq_h5": str(args.daq_h5) if args.daq_h5 is not None else None,
-        "ttl_relabeled": relabel_summary is not None,
-        "relabel_mode": args.relabel_mode if relabel_summary is not None else None,
+        "ttl_relabeled": relabeled,
+        "relabel_mode": args.relabel_mode if relabeled else None,
         "motion_corrected_file": str(corrected_path),
         "shape": [int(nframes), int(nchannels), int(height), int(width)],
         "dtype": dtype,
