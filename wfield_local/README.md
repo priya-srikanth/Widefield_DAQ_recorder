@@ -481,6 +481,31 @@ Config (one per animal): `{"animal","func_channel","reference","output","warp_u"
 (full-FOV↔ROI pairs register poorly). Across **animals**, vasculature is not shared —
 use CCF/landmarks + Allen-area (ROI) or LocaNMF-component comparison instead.
 
+## 15. ROI-based (Allen-area) activity extraction
+
+`roi_activity.py` is a lightweight CPU baseline alongside LocaNMF: it averages the
+Allen-aligned `U` over each atlas region to get a region x time trace
+(`U_bar @ SVTcorr`, no pixel reconstruction), and optionally aligns to cue/lick
+events by spout position. Runs in the wfield CPU env (numpy + h5py; no torch/GPU).
+The wfield atlas is already lateralized (`MOp_left` / `MOp_right`), so you get one
+trace per area per hemisphere — useful for stroke laterality.
+
+```powershell
+# region traces only
+python -m wfield_local.roi_activity --allen-dir <...\allen_aligned_affine8v1> `
+  --label PS94_0603 --output <...\roi_activity_affine8v1>
+# + cue/lick per-region responses by spout position (regime B: pass --frame-map + --cleanpairs-summary)
+python -m wfield_local.roi_activity --allen-dir <...> --label PS94_0603 --output <...> `
+  --daq-h5 <session.h5> --what both `
+  --frame-map <...\*_cleanpairs_frame_map.npz> --cleanpairs-summary <...\*_cleanpairs_summary.json>
+```
+
+Outputs: `*_roi_traces.npy` (R x T) + meta, `*_{cue,lick}_roi_by_position.npz`
+(regions x positions: post + delta) + a heatmap + an atlas/trace overview. This is
+the simple "one signal per area" baseline; `run_locanmf.py` gives the denoised,
+region-anchored, multi-component version. Use ROI traces as a fast cross-check and
+for quick per-area trial stats; use LocaNMF components for cross-animal claims.
+
 ## Decomposition note: SVD vs LocaNMF
 
 This local pipeline stops at **SVD + hemodynamic correction + Allen alignment**. It

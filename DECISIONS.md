@@ -166,7 +166,10 @@ newer Python compiles the extension from source (see the script header).
   pass/warn verdict).
 - `wfield_local/cross_day_align.py` — within-animal cross-day vasculature registration
   (above).
-- `wfield_local/run_locanmf.py` + `GPU_LOCANMF_KICKOFF.md` — LocaNMF on the GPU box.
+- `wfield_local/run_locanmf.py` + `GPU_LOCANMF_KICKOFF.md` — LocaNMF (and sNMF via
+  `--mode`) on the GPU box.
+- `wfield_local/roi_activity.py` — CPU Allen-area ROI traces (region-averaged ΔF/F)
+  + optional cue/lick per-region responses; lightweight baseline alongside LocaNMF.
 - `run_wfield_local` — added `--detrend-order` and exposed `--freq-highpass` /
   `--freq-lowpass` (the default 0.1 Hz highpass already removes the slow 415 LED
   drift; detrend is for when a gentler highpass is wanted).
