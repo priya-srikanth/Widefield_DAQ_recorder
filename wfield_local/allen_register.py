@@ -285,7 +285,7 @@ def run_gui(dat_path):
         ax.set_ylim(y - (y - y0) * scale, y + (y1 - y) * scale)
         fig.canvas.draw_idle()
 
-    def reset_view():
+    def reset_view(_=None):
         ax.set_xlim(-0.5, reader.W - 0.5); ax.set_ylim(reader.H - 0.5, -0.5)
         fig.canvas.draw_idle()
 
@@ -339,8 +339,10 @@ def run_gui(dat_path):
         fig.canvas.draw_idle()
     b_save.on_clicked(do_save)
     b_clear.on_clicked(lambda _: (points.clear(), draw(), msg.set_text("cleared")))
+    ax_reset = fig.add_axes([0.12, 0.02, 0.14, 0.035]); b_reset = Button(ax_reset, "Reset view")
+    b_reset.on_clicked(reset_view)
 
-    keep.extend([s_t, s_a, r_c, c_sw, r_tt, r_l, co, cc, tb, b_save, b_clear])
+    keep.extend([s_t, s_a, r_c, c_sw, r_tt, r_l, co, cc, tb, b_save, b_clear, b_reset])
     fig._allen_widgets = keep  # extra strong ref on the figure
     refresh_image()
     fig.text(0.78, 0.115, "compare = cyan(similarity) + magenta(affine)\nSave dir:\n" + sess_dir, fontsize=7)
