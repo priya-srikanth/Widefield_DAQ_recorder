@@ -93,8 +93,13 @@ def main() -> int:
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--label", required=True)
     ap.add_argument("--fs", type=float, default=31.23)
+    ap.add_argument("--overview-regions", default="MOp_left,MOp_right,MOs_left,MOs_right",
+                    help="comma-separated region keys to plot (traces + locations) in the overview")
     # optional event alignment
     ap.add_argument("--daq-h5", type=Path, default=None)
+    ap.add_argument("--quiet-frame", type=Path, default=None,
+                    help="*_quiet_frame.npy from quiet_periods.py -> also emit quiet-normalized "
+                         "per-region position maps (post minus quiet-period baseline)")
     ap.add_argument("--what", choices=("cue", "lick", "both"), default="both")
     ap.add_argument("--pre-s", type=float, default=1.0)
     ap.add_argument("--cue-post-s", type=float, default=1.0)
@@ -142,6 +147,17 @@ def main() -> int:
     Ubar = np.stack([U.reshape(-1, K)[idx].mean(0) for _, _, idx in regions])  # (R, K)
     traces = (Ubar @ SVT).astype(np.float32)                          # (R, T)
     keys = [k for k, _, _ in regions]
+    qbase = None  # per-region quiet-period baseline (R,)
+    if args.quiet_frame is not None:
+        qf = np.load(args.quiet_frame).astype(bool)
+        T = traces.shape[1]
+        qf = qf[:T] if qf.size >= T else np.pad(qf, (0, T - qf.size))
+        qidx = np.flatnonzero(qf)
+        if qidx.size:
+            qbase = traces[:, qidx].mean(1)
+            print(f"[{args.label}] quiet baseline from {qidx.size} quiet frames", flush=True)
+        else:
+            print(f"[{args.label}] WARN: no quiet frames in mask; skipping quiet-norm", flush=True)
     print(f"[{args.label}] {len(keys)} regions x T={traces.shape[1]}", flush=True)
 
     np.save(args.output / f"{args.label}_roi_traces.npy", traces)
@@ -198,24 +214,69 @@ def main() -> int:
             fig.colorbar(im, ax=axx, shrink=0.6, label="ΔF/F")
             fig.tight_layout(); fig.savefig(args.output / f"{args.label}_{what}_roi_by_position.png", dpi=130)
             plt.close(fig)
+
+            # quiet-period-normalized: post minus per-region quiet baseline
+            if qbase is not None:
+                postN = postM - qbase[:, None]
+                np.savez_compressed(args.output / f"{args.label}_{what}_roi_by_position_quietnorm.npz",
+                                    keys=np.array(keys), positions=np.array(pos_keys), post=postN)
+                nlim = np.nanpercentile(np.abs(postN), 99) or 1e-6
+                fig, axx = plt.subplots(figsize=(max(6, 0.5 * len(pos_keys) + 4), max(6, 0.16 * R)))
+                imn = axx.imshow(postN, aspect="auto", cmap="RdBu_r", vmin=-nlim, vmax=nlim)
+                axx.set_xticks(range(len(pos_keys))); axx.set_xticklabels(pos_keys, rotation=45, ha="right")
+                axx.set_yticks(range(R)); axx.set_yticklabels(keys, fontsize=5)
+                axx.set_title(f"{args.label} {what} per-region post minus quiet baseline")
+                fig.colorbar(imn, ax=axx, shrink=0.6, label="ΔF/F vs quiet")
+                fig.tight_layout(); fig.savefig(args.output / f"{args.label}_{what}_roi_by_position_quietnorm.png", dpi=130)
+                plt.close(fig)
+
             (args.output / f"{args.label}_{what}_roi_by_position_summary.json").write_text(json.dumps({
                 "label": args.label, "what": what, "counts_by_position": counts,
                 "pre_s": args.pre_s, "post_s": args.cue_post_s if what == "cue" else args.lick_post_s,
                 "regime": "B(frame-map)" if args.frame_map else "A(raw//2)",
+                "quiet_frame": str(args.quiet_frame) if args.quiet_frame else None,
+                "quietnorm": qbase is not None,
             }, indent=2))
             print(f"[{args.label}] {what}: counts {counts}", flush=True)
 
-    # ---- QC: atlas label map + a few region traces ----
-    fig, ax = plt.subplots(1, 2, figsize=(13, 5))
-    lab_img = np.where(brain_mask, atlas, np.nan)
-    ax[0].imshow(lab_img, cmap="tab20"); ax[0].set_axis_off(); ax[0].set_title(f"{args.label} Allen regions ({len(keys)})")
+    def _centroid(idx):
+        return float((idx // W).mean()), float((idx % W).mean())
+
+    # ---- reference: labeled Allen atlas (named regions at their centroids) ----
+    figR, axR = plt.subplots(figsize=(9.5, 9.5))
+    axR.imshow(np.where(brain_mask, atlas, np.nan), cmap="tab20", interpolation="nearest")
+    for (k, _lab, idx) in regions:
+        cy, cx = _centroid(idx)
+        axR.text(cx, cy, k, fontsize=4.5, ha="center", va="center", color="black")
+    axR.set_axis_off(); axR.set_title(f"{args.label} Allen reference regions ({len(keys)})")
+    figR.tight_layout(); figR.savefig(args.output / f"{args.label}_allen_reference_labeled.png", dpi=170)
+    plt.close(figR)
+
+    # ---- ROI overview: selected regions' LOCATIONS + traces ----
+    want = [s.strip() for s in args.overview_regions.split(",") if s.strip()]
+    key2row = {k: i for i, (k, _, _) in enumerate(regions)}
+    sel = [(k, idx) for (k, _l, idx) in regions if k in want]
+    missing = [w for w in want if w not in key2row]
+    if missing:
+        print(f"[{args.label}] overview regions not found: {missing}", flush=True)
+    colors = plt.cm.tab10(np.linspace(0, 1, max(len(sel), 1)))
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+    ax[0].imshow(np.where(brain_mask, atlas, np.nan), cmap="Greys", alpha=0.25, interpolation="nearest")
+    overlay = np.zeros((H, W, 4), np.float32)
+    for (k, idx), col in zip(sel, colors):
+        overlay[idx // W, idx % W, :] = col
+        cy, cx = _centroid(idx)
+        ax[0].text(cx, cy, k, fontsize=7, ha="center", va="center", weight="bold", color="black")
+    ax[0].imshow(overlay, interpolation="nearest"); ax[0].set_axis_off()
+    ax[0].set_title("selected ROI locations")
     tt = np.arange(min(traces.shape[1], int(60 * args.fs))) / args.fs
-    for r in range(min(6, len(keys))):
-        ax[1].plot(tt, traces[r, :len(tt)] + r * 0.05, lw=0.7, label=keys[r])
-    ax[1].set_xlabel("s"); ax[1].set_ylabel("ΔF/F (offset)"); ax[1].legend(fontsize=6, ncol=2)
-    ax[1].set_title("example region traces (first 60 s)")
-    fig.tight_layout(); fig.savefig(args.output / f"{args.label}_roi_overview.png", dpi=130); plt.close(fig)
-    print(f"[{args.label}] wrote ROI traces + overview to {args.output}", flush=True)
+    for i, ((k, idx), col) in enumerate(zip(sel, colors)):
+        ax[1].plot(tt, traces[key2row[k], :len(tt)] + i * 0.04, lw=0.8, color=col, label=k)
+    ax[1].set_xlabel("s"); ax[1].set_ylabel("ΔF/F (offset per ROI)"); ax[1].legend(fontsize=8)
+    ax[1].set_title("selected ROI traces (first 60 s)")
+    fig.suptitle(f"{args.label} ROI overview ({', '.join(k for k, _ in sel)})")
+    fig.tight_layout(); fig.savefig(args.output / f"{args.label}_roi_overview.png", dpi=140); plt.close(fig)
+    print(f"[{args.label}] wrote ROI traces + reference + overview to {args.output}", flush=True)
     return 0
 
 

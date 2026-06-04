@@ -501,10 +501,49 @@ python -m wfield_local.roi_activity --allen-dir <...> --label PS94_0603 --output
 ```
 
 Outputs: `*_roi_traces.npy` (R x T) + meta, `*_{cue,lick}_roi_by_position.npz`
-(regions x positions: post + delta) + a heatmap + an atlas/trace overview. This is
+(regions x positions: post + delta) + named-region heatmaps (cue and lick use the
+same region names/order), `*_allen_reference_labeled.png` (all regions colored +
+labeled at their centroids — the key for reading the heatmaps), and a
+`*_roi_overview.png` that shows the locations + traces of `--overview-regions`
+(default `MOp_left,MOp_right,MOs_left,MOs_right`). This is
 the simple "one signal per area" baseline; `run_locanmf.py` gives the denoised,
 region-anchored, multi-component version. Use ROI traces as a fast cross-check and
 for quick per-area trial stats; use LocaNMF components for cross-animal claims.
+
+## 16. Quiet-period detection (baseline selection)
+
+`quiet_periods.py` builds a per-sample and per-corrected-frame "quiet" mask (animal
+not running and not licking, not in a peri-reward window) for behavior-controlled
+baseline (F0) selection — useful because trial-triggered acquisition records no true
+inter-trial rest. Ported from the stroke pipeline's `find_quiet_bouts`
+(`quiet = slow-treadmill AND not-near-lick AND not-near-reward`, buffered) and adapted
+for ONE spout. Reuses the ported `treadmill` + `lick_detection` helpers; CPU env.
+
+```powershell
+python -m wfield_local.quiet_periods --daq-h5 <session.h5> --label PS94_0603 `
+  --output <...\quiet_affine8v1> `
+  --frame-map <...\*_cleanpairs_frame_map.npz> --cleanpairs-summary <...\*_cleanpairs_summary.json>
+```
+Outputs `*_quiet_sample.npy` (DAQ-rate bool), `*_quiet_frame.npy` (per corrected
+frame), a summary, and a QC plot (speed + lick + quiet shading). Intersect
+`quiet_frame` with the pre-cue ENL window, or pool it, to define F0.
+
+**Quiet-normalized lick maps:** pass `*_quiet_frame.npy` as `--quiet-frame` to
+`plot_lick_aligned_averages.py`, `framemap_event_maps.py` (`--what lick`), or
+`roi_activity.py`. Each then also emits a quiet-normalized output
+(`*_quietnorm*`) = the post-lick map/per-region value **minus the mean quiet-period
+map** (lick activity relative to the not-running/not-licking baseline), alongside the
+raw version. The shared helper is `quiet_periods.quiet_baseline_svt` (mean SVT over
+quiet frames).
+
+- **Grooming is OFF by default.** The stroke pipeline detects grooming via *bilateral*
+  two-spout conjunction, which doesn't apply here. Single-spout "long-touch" is the
+  only proxy, but a TRUE long lick at close spouts also looks long, so it is
+  unreliable — enable only experimentally with `--grooming`.
+- **TUNE LATER:** running/quiet speed, min durations, and lick/reward/treadmill time
+  buffers are stroke-pipeline starting points (e.g. the 8 s reward buffer is generous
+  for short ENL windows). Revisit per rig/task, ideally validated against
+  DLC/FaceRhythm movement once available (the future movement regressor).
 
 ## Decomposition note: SVD vs LocaNMF
 

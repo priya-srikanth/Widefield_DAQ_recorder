@@ -16,9 +16,9 @@ from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
 from lxml import etree
 
-DST = r"E:\labcams_data\PS92_94_95_affine8v1.pptx"
+DST = r"N:\MICROSCOPE\Priya\Widefield\labcams\PS92_94_95_affine8v1.pptx"  # canonical deck on MICROSCOPE
 TAG = "affine8v1"
-D = r"E:\labcams_data"
+D = r"E:\labcams_data"  # figures still read locally from E (SVD/alignment/maps kept there)
 
 # (title, date_subtitle, motion_corrected_dir, label)
 SESSIONS = [
@@ -27,13 +27,13 @@ SESSIONS = [
     ("PS95 - 2026-06-01", "full-FOV; raw//2 frame mapping",
      fr"{D}\20260601\PS95_20260601_153653\motion_corrected", "PS95_affine8v1"),
     ("PS92 - 2026-06-02 (rescued)", "ROI crop; cleanpairs frame-map mapping; functional-channel fix",
-     fr"{D}\20260602\PS92\PS92_20260602_151820\illuminated_rescue\motion_corrected", "PS92_0602_affine8v1"),
+     fr"{D}\20260602\PS92_20260602_151820\illuminated_rescue\motion_corrected", "PS92_0602_affine8v1"),
     ("PS92 - 2026-06-03", "ROI crop; cleanpairs frame-map mapping",
-     fr"{D}\20260603\PS92\PS92_20260603_104008\motion_corrected", "PS92_0603_affine8v1"),
+     fr"{D}\20260603\PS92_20260603_104008\motion_corrected", "PS92_0603_affine8v1"),
     ("PS94 - 2026-06-03", "ROI crop; cleanpairs frame-map mapping",
-     fr"{D}\20260603\PS94\motion_corrected", "PS94_0603_affine8v1"),
+     fr"{D}\20260603\PS94_20260603\motion_corrected", "PS94_0603_affine8v1"),
     ("PS95 - 2026-06-03", "ROI crop; cleanpairs frame-map mapping",
-     fr"{D}\20260603\PS95\PS95\PS95_20260603_194442\motion_corrected", "PS95_0603_affine8v1"),
+     fr"{D}\20260603\PS95_20260603_194442\motion_corrected", "PS95_0603_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
@@ -181,6 +181,27 @@ if os.path.exists(pb_png) and pb_title not in present:
             pb_png, 0.15, 1.7, 12.9)
     pb_added = True
 
+# ---- 4b) Quiet-normalized lick activity (lands before QC; QC is moved to end below) ----
+NLAB = r"N:\MICROSCOPE\Priya\Widefield\labcams"
+present = {slide_title(s) for s in prs.slides}
+ql_div = "Quiet-normalized lick activity"
+ql_added = []
+ql_sessions = []
+for title, datesub, mc, lab in SESSIONS:
+    n_mc = mc.replace(r"E:\labcams_data", NLAB)
+    qn = os.path.join(n_mc, "lick_aligned_affine8v1", f"{lab}_lick_aligned_150ms_post_by_spout_quietnorm.png")
+    if os.path.exists(qn):
+        ql_sessions.append((title, qn))
+if ql_sessions and ql_div not in present:
+    divider(ql_div, "150 ms post-lick by spout position MINUS the mean quiet-period (not-running / "
+                    "not-licking) baseline = lick-evoked activity relative to the quiet state. "
+                    "Quiet-period thresholds are provisional (tune later).")
+for title, qn in ql_sessions:
+    ct = f"{title}: lick-evoked vs quiet baseline (150 ms post-lick)"
+    if ct not in present:
+        content(ct, "post-lick by spout position minus quiet-period baseline (quiet-normalized)", qn, 2.60, 1.40, 8.20)
+        ql_added.append(title)
+
 # ---- 5) Move all QC / diagnostic slides to the very end (after activity maps) ----
 def _is_qc(t: str) -> bool:
     t = t.lower()
@@ -198,5 +219,5 @@ for el, t in zip(children, titles):
 
 prs.save(DST)
 print(f"swapped {swapped} map pictures; appended sections: {added}; QC slides: {qc_added}; "
-      f"photobleach: {pb_added}; moved-to-end: {moved}; slides now {len(prs.slides)}")
+      f"photobleach: {pb_added}; quiet-lick: {ql_added}; moved-to-end: {moved}; slides now {len(prs.slides)}")
 print(f"backup at {DST}.bak")

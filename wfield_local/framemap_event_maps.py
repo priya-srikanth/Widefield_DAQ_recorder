@@ -208,12 +208,42 @@ def run_lick(args) -> int:
         args.output / f"{args.label}_lick_aligned_{ms}ms_post_by_spout_maps.npz",
         **{f"{name}_post": arr for name, arr in maps.items()},
     )
+
+    # ---- optional: quiet-period-normalized (post-lick minus quiet baseline) ----
+    quietnorm_png = None
+    if getattr(args, "quiet_frame", None) is not None and maps:
+        from wfield_local.quiet_periods import quiet_baseline_svt
+        qmap = _weighted_map(U, quiet_baseline_svt(SVTcorr, np.load(args.quiet_frame)))
+        norm_maps = {name: (arr - qmap).astype(np.float32) for name, arr in maps.items()}
+        nlim = _shared_limit(norm_maps, 99.0)
+        fig, axes = plt.subplots(2, 3, figsize=(11, 7), constrained_layout=True)
+        im = None
+        for ax, code in zip(axes.ravel(), DISPLAY_ORDER):
+            name = POSITION_NAMES[code]; ax.set_axis_off()
+            if name not in norm_maps:
+                ax.set_title(f"{name}: no licks"); continue
+            im = ax.imshow(norm_maps[name], cmap="RdBu_r", vmin=-nlim, vmax=nlim)
+            _overlay_regions(ax, edges)
+            ax.set_title(f"{name} n={counts[name]} | {args.post_s*1000:.0f} ms post-lick (quiet-norm)", fontsize=10)
+        if im is not None:
+            fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.78, pad=0.01,
+                         label=f"post-lick minus quiet baseline (+/-{nlim:.4g})")
+        fig.suptitle(f"{args.label} post-lick, normalized to quiet-period baseline", fontsize=14)
+        quietnorm_png = args.output / f"{args.label}_lick_aligned_{ms}ms_post_by_spout_quietnorm.png"
+        fig.savefig(quietnorm_png, dpi=180); plt.close(fig)
+        np.savez_compressed(
+            args.output / f"{args.label}_lick_aligned_{ms}ms_post_by_spout_quietnorm_maps.npz",
+            **{f"{name}_postnorm": arr for name, arr in norm_maps.items()},
+        )
+
     summary = {
         "label": args.label, "daq_h5": str(args.daq_h5), "wfield_results": str(args.wfield_results),
         "allen_dir": str(args.allen_dir), "frame_map": str(args.frame_map), "offset": offset,
         "post_s": args.post_s, "fs": args.fs, "lick_channel": args.lick_channel,
         "detected_lick_count": int(ev["lick_samples"].size), "valid_licks_with_windows": int(valid.sum()),
         "counts_by_position": counts, "display_limit": lim,
+        "quiet_frame": str(args.quiet_frame) if getattr(args, "quiet_frame", None) else None,
+        "quietnorm_png": str(quietnorm_png) if quietnorm_png else None,
         "frame_mapping": "relabeled cleanpairs: DAQ lick -> nearest kept corrected frame via frame_map+pco pulses",
     }
     (args.output / f"{args.label}_lick_aligned_{ms}ms_post_by_spout_summary.json").write_text(json.dumps(summary, indent=2))
@@ -236,6 +266,9 @@ def main() -> int:
     p.add_argument("--fs", type=float, default=31.23)
     p.add_argument("--pre-s", type=float, default=1.0)
     p.add_argument("--post-s", type=float, default=None, help="cue default 1.0; lick default 0.150")
+    p.add_argument("--quiet-frame", type=Path, default=None,
+                   help="(lick only) *_quiet_frame.npy from quiet_periods.py -> also emit a "
+                        "quiet-normalized figure/npz (post-lick minus quiet baseline)")
     p.add_argument("--lick-channel", default="lick_analog")
     p.add_argument("--lick-thresh-upper-v", type=float, default=2.5)
     p.add_argument("--lick-thresh-lower-v", type=float, default=1.0)
