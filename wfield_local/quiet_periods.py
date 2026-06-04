@@ -80,6 +80,23 @@ def set_short_bool_to_low(b: np.ndarray, n: int) -> np.ndarray:
     return b
 
 
+def quiet_baseline_svt(svt: np.ndarray, quiet_frame: np.ndarray) -> np.ndarray:
+    """Mean SVT (K,) over the quiet frames -> the quiet-period baseline in SVD space.
+
+    Subtract `U @ quiet_baseline_svt(...)` from an event-aligned map to express
+    activity relative to the not-running/not-licking quiet baseline instead of the
+    session mean. `quiet_frame` is the per-corrected-frame mask from this module;
+    it is clipped/padded to the SVT length.
+    """
+    T = svt.shape[1]
+    qf = np.asarray(quiet_frame).astype(bool)
+    qf = qf[:T] if qf.size >= T else np.pad(qf, (0, T - qf.size))
+    idx = np.flatnonzero(qf)
+    if idx.size == 0:
+        raise ValueError("no quiet frames in mask")
+    return np.asarray(svt[:, idx]).mean(axis=1).astype(np.float32)
+
+
 def _rising(sig: np.ndarray, thr: float = 0.5) -> np.ndarray:
     bb = (np.asarray(sig) > thr).astype(np.int8)
     return np.flatnonzero(np.diff(bb) == 1) + 1

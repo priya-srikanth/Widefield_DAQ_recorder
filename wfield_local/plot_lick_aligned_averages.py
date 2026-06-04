@@ -252,6 +252,14 @@ def main() -> int:
         help="Map DAQ licks to imaging frames by DAQ pco_exposure pulse order (default) or legacy camlog wall-clock timestamps.",
     )
     parser.add_argument("--display-percentile", type=float, default=99.0)
+    parser.add_argument(
+        "--quiet-frame",
+        type=Path,
+        default=None,
+        help="Optional *_quiet_frame.npy (from quiet_periods.py). If given, also emit a "
+        "quiet-normalized figure/npz: each post-lick map minus the mean quiet-period map "
+        "(activity relative to the not-running/not-licking baseline).",
+    )
     args = parser.parse_args()
 
     args.output.mkdir(parents=True, exist_ok=True)
@@ -340,6 +348,36 @@ def main() -> int:
         args.output / f"{args.label}_lick_aligned_{int(round(args.post_s * 1000))}ms_post_by_spout_maps.npz",
         **npz_payload,
     )
+
+    # ---- optional: quiet-period-normalized maps (post-lick minus quiet baseline) ----
+    quietnorm_png = None
+    if args.quiet_frame is not None and maps:
+        from wfield_local.quiet_periods import quiet_baseline_svt
+        qmap = _weighted_map(U, quiet_baseline_svt(SVTcorr, np.load(args.quiet_frame)))
+        norm_maps = {name: (arr - qmap).astype(np.float32) for name, arr in maps.items()}
+        nlim = _shared_limit(norm_maps, args.display_percentile)
+        fig, axes = plt.subplots(2, 3, figsize=(11, 7), constrained_layout=True)
+        im = None
+        for ax, code in zip(axes.ravel(), DISPLAY_ORDER):
+            name = POSITION_NAMES[code]
+            ax.set_axis_off()
+            if name not in norm_maps:
+                ax.set_title(f"{name}: no licks")
+                continue
+            im = ax.imshow(norm_maps[name], cmap="RdBu_r", vmin=-nlim, vmax=nlim)
+            _overlay_regions(ax, edges)
+            ax.set_title(f"{name} n={counts[name]} | {args.post_s * 1000:.0f} ms post-lick (quiet-norm)", fontsize=10)
+        if im is not None:
+            fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.78, pad=0.01,
+                         label=f"post-lick minus quiet baseline (±{nlim:.4g})")
+        fig.suptitle(f"{args.label} post-lick, normalized to quiet-period baseline", fontsize=14)
+        quietnorm_png = args.output / f"{args.label}_lick_aligned_{int(round(args.post_s * 1000))}ms_post_by_spout_quietnorm.png"
+        fig.savefig(quietnorm_png, dpi=180); plt.close(fig)
+        np.savez_compressed(
+            args.output / f"{args.label}_lick_aligned_{int(round(args.post_s * 1000))}ms_post_by_spout_quietnorm_maps.npz",
+            **{f"{name}_postnorm": arr for name, arr in norm_maps.items()},
+        )
+
     summary = {
         "label": args.label,
         "daq_h5": str(args.daq_h5),
@@ -363,6 +401,8 @@ def main() -> int:
         "frame_mapping": frame_mapping,
         "frame_alignment_qc": frame_qc,
         "output_png": str(png),
+        "quiet_frame": str(args.quiet_frame) if args.quiet_frame else None,
+        "quietnorm_png": str(quietnorm_png) if quietnorm_png else None,
     }
     (args.output / f"{args.label}_lick_aligned_{int(round(args.post_s * 1000))}ms_post_by_spout_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"

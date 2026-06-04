@@ -528,6 +528,14 @@ Outputs `*_quiet_sample.npy` (DAQ-rate bool), `*_quiet_frame.npy` (per corrected
 frame), a summary, and a QC plot (speed + lick + quiet shading). Intersect
 `quiet_frame` with the pre-cue ENL window, or pool it, to define F0.
 
+**Quiet-normalized lick maps:** pass `*_quiet_frame.npy` as `--quiet-frame` to
+`plot_lick_aligned_averages.py`, `framemap_event_maps.py` (`--what lick`), or
+`roi_activity.py`. Each then also emits a quiet-normalized output
+(`*_quietnorm*`) = the post-lick map/per-region value **minus the mean quiet-period
+map** (lick activity relative to the not-running/not-licking baseline), alongside the
+raw version. The shared helper is `quiet_periods.quiet_baseline_svt` (mean SVT over
+quiet frames).
+
 - **Grooming is OFF by default.** The stroke pipeline detects grooming via *bilateral*
   two-spout conjunction, which doesn't apply here. Single-spout "long-touch" is the
   only proxy, but a TRUE long lick at close spouts also looks long, so it is

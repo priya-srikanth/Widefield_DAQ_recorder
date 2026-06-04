@@ -97,6 +97,9 @@ def main() -> int:
                     help="comma-separated region keys to plot (traces + locations) in the overview")
     # optional event alignment
     ap.add_argument("--daq-h5", type=Path, default=None)
+    ap.add_argument("--quiet-frame", type=Path, default=None,
+                    help="*_quiet_frame.npy from quiet_periods.py -> also emit quiet-normalized "
+                         "per-region position maps (post minus quiet-period baseline)")
     ap.add_argument("--what", choices=("cue", "lick", "both"), default="both")
     ap.add_argument("--pre-s", type=float, default=1.0)
     ap.add_argument("--cue-post-s", type=float, default=1.0)
@@ -144,6 +147,17 @@ def main() -> int:
     Ubar = np.stack([U.reshape(-1, K)[idx].mean(0) for _, _, idx in regions])  # (R, K)
     traces = (Ubar @ SVT).astype(np.float32)                          # (R, T)
     keys = [k for k, _, _ in regions]
+    qbase = None  # per-region quiet-period baseline (R,)
+    if args.quiet_frame is not None:
+        qf = np.load(args.quiet_frame).astype(bool)
+        T = traces.shape[1]
+        qf = qf[:T] if qf.size >= T else np.pad(qf, (0, T - qf.size))
+        qidx = np.flatnonzero(qf)
+        if qidx.size:
+            qbase = traces[:, qidx].mean(1)
+            print(f"[{args.label}] quiet baseline from {qidx.size} quiet frames", flush=True)
+        else:
+            print(f"[{args.label}] WARN: no quiet frames in mask; skipping quiet-norm", flush=True)
     print(f"[{args.label}] {len(keys)} regions x T={traces.shape[1]}", flush=True)
 
     np.save(args.output / f"{args.label}_roi_traces.npy", traces)
@@ -200,10 +214,28 @@ def main() -> int:
             fig.colorbar(im, ax=axx, shrink=0.6, label="ΔF/F")
             fig.tight_layout(); fig.savefig(args.output / f"{args.label}_{what}_roi_by_position.png", dpi=130)
             plt.close(fig)
+
+            # quiet-period-normalized: post minus per-region quiet baseline
+            if qbase is not None:
+                postN = postM - qbase[:, None]
+                np.savez_compressed(args.output / f"{args.label}_{what}_roi_by_position_quietnorm.npz",
+                                    keys=np.array(keys), positions=np.array(pos_keys), post=postN)
+                nlim = np.nanpercentile(np.abs(postN), 99) or 1e-6
+                fig, axx = plt.subplots(figsize=(max(6, 0.5 * len(pos_keys) + 4), max(6, 0.16 * R)))
+                imn = axx.imshow(postN, aspect="auto", cmap="RdBu_r", vmin=-nlim, vmax=nlim)
+                axx.set_xticks(range(len(pos_keys))); axx.set_xticklabels(pos_keys, rotation=45, ha="right")
+                axx.set_yticks(range(R)); axx.set_yticklabels(keys, fontsize=5)
+                axx.set_title(f"{args.label} {what} per-region post minus quiet baseline")
+                fig.colorbar(imn, ax=axx, shrink=0.6, label="ΔF/F vs quiet")
+                fig.tight_layout(); fig.savefig(args.output / f"{args.label}_{what}_roi_by_position_quietnorm.png", dpi=130)
+                plt.close(fig)
+
             (args.output / f"{args.label}_{what}_roi_by_position_summary.json").write_text(json.dumps({
                 "label": args.label, "what": what, "counts_by_position": counts,
                 "pre_s": args.pre_s, "post_s": args.cue_post_s if what == "cue" else args.lick_post_s,
                 "regime": "B(frame-map)" if args.frame_map else "A(raw//2)",
+                "quiet_frame": str(args.quiet_frame) if args.quiet_frame else None,
+                "quietnorm": qbase is not None,
             }, indent=2))
             print(f"[{args.label}] {what}: counts {counts}", flush=True)
 
