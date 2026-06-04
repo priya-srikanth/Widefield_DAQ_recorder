@@ -151,6 +151,23 @@ for title, datesub, mc, lab in sessions_present_figs:
     for suffix_title, subdir, fsuffix, l, t, w in FIGS:
         content(title + suffix_title, sub, fig_path(mc, lab, subdir, fsuffix), l, t, w)
 
+# ---- 3) Motion-correction QC section (idempotent via title guards) ----
+present = {slide_title(s) for s in prs.slides}
+qc_div = "Motion-correction QC"
+qc_sessions = [(t, mc, lab) for t, _, mc, lab in sessions_present_figs
+               if os.path.exists(os.path.join(mc, "motion_qc", f"{lab}_motion_qc.png"))]
+qc_added = []
+if qc_sessions and qc_div not in present:
+    divider(qc_div, "Per-frame rigid shifts + histogram, mean-image sharpness (raw vs corrected), "
+                    "and corrected temporal-std (residual motion). Median shift should be sub-pixel.")
+for title, mc, lab in qc_sessions:
+    ct = f"{title}: motion-correction QC"
+    if ct in present:
+        continue
+    content(ct, "Shift traces / magnitude histogram / sharpness / residual-motion std",
+            os.path.join(mc, "motion_qc", f"{lab}_motion_qc.png"), 0.15, 1.35, 12.9)
+    qc_added.append(title)
+
 prs.save(DST)
-print(f"swapped {swapped} map pictures; appended sections: {added}; slides now {len(prs.slides)}")
+print(f"swapped {swapped} map pictures; appended sections: {added}; QC slides: {qc_added}; slides now {len(prs.slides)}")
 print(f"backup at {DST}.bak")
