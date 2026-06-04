@@ -501,7 +501,11 @@ python -m wfield_local.roi_activity --allen-dir <...> --label PS94_0603 --output
 ```
 
 Outputs: `*_roi_traces.npy` (R x T) + meta, `*_{cue,lick}_roi_by_position.npz`
-(regions x positions: post + delta) + a heatmap + an atlas/trace overview. This is
+(regions x positions: post + delta) + named-region heatmaps (cue and lick use the
+same region names/order), `*_allen_reference_labeled.png` (all regions colored +
+labeled at their centroids — the key for reading the heatmaps), and a
+`*_roi_overview.png` that shows the locations + traces of `--overview-regions`
+(default `MOp_left,MOp_right,MOs_left,MOs_right`). This is
 the simple "one signal per area" baseline; `run_locanmf.py` gives the denoised,
 region-anchored, multi-component version. Use ROI traces as a fast cross-check and
 for quick per-area trial stats; use LocaNMF components for cross-animal claims.
