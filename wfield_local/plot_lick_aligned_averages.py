@@ -209,12 +209,8 @@ def _weighted_map(U: np.ndarray, svt_mean: np.ndarray) -> np.ndarray:
     return np.tensordot(U, svt_mean, axes=([2], [0])).astype(np.float32)
 
 
-def _region_edges(atlas: np.ndarray) -> np.ndarray:
-    valid = np.isfinite(atlas) & (atlas != 0)
-    edges = np.zeros_like(valid, dtype=bool)
-    edges[:-1, :] |= atlas[:-1, :] != atlas[1:, :]
-    edges[:, :-1] |= atlas[:, :-1] != atlas[:, 1:]
-    return ndimage.binary_dilation(edges & valid, iterations=1)
+# region_edges is centralized in wfield_local.atlas_overlay (symmetric edge fix)
+from wfield_local.atlas_overlay import region_edges as _region_edges
 
 
 def _overlay_regions(ax, edges: np.ndarray) -> None:
