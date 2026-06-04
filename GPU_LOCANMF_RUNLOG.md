@@ -106,7 +106,23 @@ count (T≈90 k, ~48 min recording) is the main driver.
 The raw component array (and `regions.npy`) stays region-grouped, ascending by seed
 label; the energy view is just a re-plot, it does not reorder the saved arrays.
 
+## Final batch (2026-06-04): all 6 sessions at r2=0.95, loc_thresh=80, maxrank=20
+Canonical LocaNMF components produced for every Allen-aligned session via
+`wfield_local/batch_locanmf.py` (JSON-manifest-driven, kill-safe/resumable — skips sessions
+whose summary already exists), each into a NEW `<session>/motion_corrected/locanmf_affine8v1_final/`
+folder so no existing output was overwritten/deleted. cuhals-accelerated.
+
+| session | n_components | | session | n_components |
+|---|---|---|---|---|
+| PS94 6/1 | 132 | | PS92 6/3 | 89 |
+| PS95 6/1 | 183 | | PS94 6/3 | 90 |
+| PS92 6/2 | 63 | | PS95 6/3 | 152 |
+
+(PS94/PS95 6/3 reproduce their loc80 sweep counts exactly — 90 / 152.)
+
 ## Runtime / launch tip
-Launch the run so stdout streams to a log (e.g. `*> run.log 2>&1`), **not** through
-PowerShell `| Out-String`, which buffers all of locanmf's per-rank-iteration progress prints
-until the process exits (no live progress / ETA).
+For **live** progress, launch with `python -u` AND have the launcher write straight to a file
+(e.g. the driver's `subprocess(..., stdout=open(log,'w',buffering=1))` in
+`sweep_locanmf.py`/`batch_locanmf.py`). Avoid PowerShell `| Out-String` (buffers everything to
+the end) and even `*> run.log` (PowerShell buffers its redirection too); locanmf's internal
+per-rank-iteration prints are unbuffered only under `python -u` + a directly-written file.
