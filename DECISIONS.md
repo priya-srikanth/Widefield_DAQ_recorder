@@ -154,6 +154,13 @@ kickoff (clone repo → set up torch+locanmf env matching the GPU's CUDA → rea
 `N:\MICROSCOPE\Priya\...` → run). There is no maintained newer-Python *prebuilt* locanmf;
 newer Python compiles the extension from source (see the script header).
 
+**Run log (2026-06-04, RTX 4060 box):** see `GPU_LOCANMF_RUNLOG.md` for the env recipe
+that worked (py3.10 + torch 2.6.0+cu124 + wfield 0.6.0 + pure-Python locanmf), the 3
+torch-compatibility patches modern torch needs (`wfield_local/locanmf_torch_compat.patch`),
+the `M:` (not `N:`) drive mapping on that machine, and the decision to defer the `cuhals`
+CUDA kernel (no MSVC C++ workload installed; it is a pure speed optimization and does not
+change results).
+
 ## Significant local-analysis modules (added during this work)
 
 - `wfield_local/atlas_overlay.py` — shared region-outline helper (the fix above).

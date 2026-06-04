@@ -1,0 +1,44 @@
+diff --git a/locanmf/demix.py b/locanmf/demix.py
+index 14cdc46..60d5ee8 100644
+--- a/locanmf/demix.py
++++ b/locanmf/demix.py
+@@ -118,8 +118,8 @@ class TemporalLS():
+ 
+         """
+ 
+-        torch.inverse(self.covariance.data,
+-                      out=self.covariance.data)
++        # torch>=1.5 forbids out= aliasing the input for inverse; round-trip via a fresh tensor.
++        self.covariance.data.copy_(torch.inverse(self.covariance.data))
+         torch.matmul(self.covariance.data,
+                      self.temporal.scratch,
+                      out=self.temporal.data)
+@@ -411,7 +411,7 @@ class LocalizedNMF(SpatialHals, TemporalHals, BaseNMF):
+         self.spatial.data.fill_(0.0)
+         for rdx, rank in enumerate(ranks):
+             self.spatial.data[sdx:sdx+rank].masked_scatter_(
+-                region_metadata.support.data[rdx],
++                region_metadata.support.data[rdx].bool(),  # torch>=1.2 requires bool masks (support is uint8)
+                 region_factorizations[rdx].spatial.data
+             )
+             self.temporal.data[sdx:sdx+rank].copy_(
+diff --git a/locanmf/factor.py b/locanmf/factor.py
+index 3b7f5df..0acfa60 100644
+--- a/locanmf/factor.py
++++ b/locanmf/factor.py
+@@ -67,9 +67,8 @@ class TensorFactor():
+             scratch=False
+ 
+         """
+-        torch.index_select(self.data, dim, permutation, out=self.data)
++        # torch>=1.5 forbids out= aliasing the input; index_select allocates a fresh
++        # result, then copy_ writes it back into the same storage (preserving .set_ tricks).
++        self.data.copy_(torch.index_select(self.data, dim, permutation))
+         if scratch and (self._scratch is not None):
+-            torch.index_select(self.scratch,
+-                               dim,
+-                               permutation,
+-                               out=self.scratch)
+\ No newline at end of file
++            self.scratch.copy_(torch.index_select(self.scratch, dim, permutation))
+\ No newline at end of file
