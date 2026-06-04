@@ -17,12 +17,13 @@ AP/ML scale + shear) correct aspect-ratio/shear mismatch.
 
 Usage:
   python -m wfield_local.allen_register <path-to-*_2_H_W_uint16.dat>
-  python -m wfield_local.allen_register             # file picker
+  python -m wfield_local.allen_register             # launch blank; load from GUI
   python -m wfield_local.allen_register --selftest  # headless logic check
 
 Controls: time/avg sliders; channel radio (415/470); landmark radio (which point
 the next click sets); transform radio (similarity/affine); "compare" check (draw
 both); "overlay" check (draw atlas); Save (writes JSON with the label in the box).
+"Load .dat" picks a recording (and switches sessions) from within the GUI.
 """
 from __future__ import annotations
 
@@ -131,6 +132,17 @@ class DatReader:
         return np.asarray(self.mm[idx], dtype=np.float32).mean(0)
 
 
+class _BlankReader:
+    """Placeholder so the GUI can launch with no recording; load one from within."""
+    nchan, H, W, npairs, nphys = 2, 480, 540, 1, 2
+
+    def image(self, *a):
+        return np.zeros((self.H, self.W), np.float32)
+
+
+_DATA_ROOT = r"E:\labcams_data" if os.path.isdir(r"E:\labcams_data") else os.path.expanduser("~")
+
+
 def _draw_reference_guide(ax, ccf_regions):
     """Draw the Allen dorsal-cortex outline + suggested landmark positions."""
     from skimage.transform import SimilarityTransform
@@ -148,19 +160,19 @@ def _draw_reference_guide(ax, ccf_regions):
     ax.set_title("Allen reference: suggested placements", fontsize=8)
 
 
-def run_gui(dat_path):
+def run_gui(dat_path=None):
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider, RadioButtons, Button, CheckButtons, TextBox
 
-    reader = DatReader(dat_path)
+    reader = DatReader(dat_path) if dat_path else _BlankReader()
     ccf_regions, _proj, _outline = allen_load_reference("dorsal_cortex")
     points = {}
     overlay_artists, marker_artists = [], []
     keep = []  # retain widget refs so matplotlib does not garbage-collect them
     state = {"channel": 0, "navg": 60, "pair": reader.npairs // 2,
              "place": "OB_center", "overlay": True, "compare": False, "ttype": "affine",
-             "swap": False, "drag": None}
-    sess_dir = os.path.dirname(dat_path)
+             "swap": False, "drag": None, "dat": dat_path}
+    sess_dir = os.path.dirname(dat_path) if dat_path else ""
 
     def eff_off():
         # which physical frame parity to show as the chosen channel; "swap" flips
@@ -171,6 +183,15 @@ def run_gui(dat_path):
     ax = fig.add_axes([0.03, 0.22, 0.50, 0.73])
     ax.set_title("click=place  drag pt=move  Del=delete  drag bg/right-drag=pan  scroll=zoom")
     im = ax.imshow(reader.image(state["pair"], eff_off(), state["navg"]), cmap="gray")
+    file_txt = fig.text(0.03, 0.965, "", fontsize=9, weight="bold")
+
+    def set_file_text():
+        if state.get("dat"):
+            file_txt.set_text("%s   (%d pairs, %dx%d)" % (
+                os.path.basename(state["dat"]), reader.npairs, reader.W, reader.H))
+        else:
+            file_txt.set_text("(no .dat loaded -- click 'Load .dat')")
+    set_file_text()
 
     # reference guide panel (static)
     ax_ref = fig.add_axes([0.56, 0.55, 0.20, 0.40])
@@ -211,7 +232,8 @@ def run_gui(dat_path):
     def refresh_image():
         img = reader.image(state["pair"], eff_off(), state["navg"])
         im.set_data(img)
-        lo, hi = np.percentile(img, [1, 99.5]); im.set_clim(lo, hi)
+        lo, hi = np.percentile(img, [1, 99.5])
+        im.set_clim(lo, hi if hi > lo else lo + 1)
         draw()
 
     def _nearest_point(x, y):
@@ -394,20 +416,65 @@ def run_gui(dat_path):
                 tgt = _nearest_point(event.xdata, event.ydata)
             delete_point(tgt or state["place"])  # nearest under cursor, else selected
 
+    savedir_txt = fig.text(0.78, 0.10, "", fontsize=7)
+
+    def set_savedir_text():
+        savedir_txt.set_text("compare = cyan(similarity) + magenta(affine)\n"
+                             "Del key = remove pt under cursor\nSave dir:\n"
+                             + (sess_dir or "(load a .dat first)"))
+
+    def load_dat(path):
+        nonlocal reader, sess_dir
+        try:
+            r = DatReader(path)
+        except Exception as e:
+            msg.set_text("Load .dat failed:\n%s" % e); fig.canvas.draw_idle(); return
+        reader = r
+        sess_dir = os.path.dirname(path)
+        state["dat"] = path
+        points.clear()                      # landmarks are session-specific
+        state["pair"] = reader.npairs // 2
+        state["swap"] = False
+        im.set_extent((-0.5, reader.W - 0.5, reader.H - 0.5, -0.5))
+        s_t.valmin = 0; s_t.valmax = max(1, reader.npairs - 1)
+        s_t.ax.set_xlim(0, s_t.valmax)
+        s_t.set_val(state["pair"])          # fires on_changed -> refresh_image
+        reset_view(); refresh_image()
+        set_file_text(); set_savedir_text()
+        msg.set_text("Loaded .dat:\n%s" % os.path.basename(path))
+        print("[allen_register] loaded .dat", path)
+        fig.canvas.draw_idle()
+
+    def do_load_dat(_):
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk(); root.withdraw()
+            init = sess_dir if sess_dir and os.path.isdir(sess_dir) else _DATA_ROOT
+            fn = filedialog.askopenfilename(
+                initialdir=init, title="Load labcams .dat",
+                filetypes=[("labcams dat", "*.dat"), ("all", "*.*")])
+            root.destroy()
+            if fn:
+                load_dat(fn)
+        except Exception as e:
+            msg.set_text("Load .dat failed: %s" % e); fig.canvas.draw_idle()
+
     b_save.on_clicked(do_save)
     b_clear.on_clicked(lambda _: (points.clear(), draw(), msg.set_text("cleared")))
     b_load.on_clicked(do_load)
     b_del.on_clicked(lambda _: delete_point(state["place"]))
     fig.canvas.mpl_connect("key_press_event", on_key)
-    ax_reset = fig.add_axes([0.12, 0.02, 0.14, 0.035]); b_reset = Button(ax_reset, "Reset view")
+    ax_reset = fig.add_axes([0.12, 0.02, 0.13, 0.035]); b_reset = Button(ax_reset, "Reset view")
     b_reset.on_clicked(reset_view)
+    ax_loaddat = fig.add_axes([0.27, 0.02, 0.13, 0.035]); b_loaddat = Button(ax_loaddat, "Load .dat")
+    b_loaddat.on_clicked(do_load_dat)
 
     keep.extend([s_t, s_a, r_c, c_sw, r_tt, r_l, co, cc, tb,
-                 b_save, b_clear, b_load, b_del, b_reset])
+                 b_save, b_clear, b_load, b_del, b_reset, b_loaddat])
     fig._allen_widgets = keep  # extra strong ref on the figure
     refresh_image()
-    fig.text(0.78, 0.10, "compare = cyan(similarity) + magenta(affine)\n"
-             "Del key = remove pt under cursor\nSave dir:\n" + sess_dir, fontsize=7)
+    set_savedir_text()
     plt.show()
 
 
@@ -463,18 +530,9 @@ def main():
     args = ap.parse_args()
     if args.selftest:
         selftest(); return 0
-    dat = args.dat
-    if dat is None:
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
-            tk.Tk().withdraw()
-            dat = filedialog.askopenfilename(title="Select labcams .dat", filetypes=[("labcams dat", "*.dat")])
-        except Exception:
-            pass
-    if not dat:
-        print("No recording selected."); return 1
-    run_gui(dat)
+    # With a path: open that recording. Without: launch the GUI blank and let the
+    # user load a .dat (and switch sessions) from within via the "Load .dat" button.
+    run_gui(args.dat)
     return 0
 
 
