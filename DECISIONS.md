@@ -192,6 +192,43 @@ the GPU machine's LocaNMF work on `main`.
   `--freq-lowpass` (the default 0.1 Hz highpass already removes the slow 415 LED
   drift; detrend is for when a gentler highpass is wanted).
 
+## Data lifecycle, archival & deletions (2026-06-04)
+
+Storage now has three tiers; **new analysis outputs go to N: (`...\Priya\...`)** going forward:
+- **Raw** `.dat` -> **M:** standby, verified, then deleted from E: (~648 GB freed).
+- **Analyzed** (motion-corrected `.bin`, SVD/alignment, maps, QC, decks) -> **N:**
+  `MICROSCOPE\Priya\Widefield\labcams`, verified (0 missing).
+- **DAQ** `.h5` -> **N:** `MICROSCOPE\Priya\Widefield\DAQ_recorder_output`, verified,
+  then deleted from E: (4.5 GB).
+- Deleted from E: after verification: the motion-corrected `.bin` (~621 GB, on N:) and
+  the **cleanpairs movies** `*_cleanpairs_*_uint16.dat` (~340 GB, regenerable from the
+  M: raw via relabel; intentionally NOT archived).
+- **Kept on E:** SVD/alignment/maps/QC outputs (for fast local re-analysis) and the
+  small `*_cleanpairs_frame_map.npz/.csv` + `*_cleanpairs_summary.json` (needed for
+  regime-B event alignment; these ARE also on N:). All server ops are copy-only and
+  only inside `Priya\` (see [[microscope-server-safety]]).
+
+## Relabel step for future recordings (latest firmware)
+
+The relabel/cleanpairs step is still recommended even with the current trial-gated
+acquire-enable firmware: the 6/3 acquire-enable recordings still had ~100-180 stray
+illuminated/dark frames that relabel dropped, and relabel guarantees deterministic
+415/470 pairing + the `frame_map` that regime-B event alignment needs. Use
+`--relabel-mode acquire-enable` for trial-gated recordings (the lighter mode);
+`rescue` is for the older continuously-saved sessions. Note: the cleanpairs **movie**
+is a deletable, regenerable intermediate, but the relabel **step** and its small
+`frame_map` stay in the pipeline. (If a future session's saved `.dat` is provably
+clean — DAQ pco count == saved frame count, consistent parity, no stray frames — the
+standard raw//2 regime-A mapping like the 6/1 sessions can be used instead.)
+
+## Quiet-normalized lick activity (workflow)
+
+`quiet_periods.py` -> `*_quiet_frame.npy`; pass it as `--quiet-frame` to the lick
+plotter (`plot_lick_aligned_averages` regime A / `framemap_event_maps --what lick`
+regime B) to emit both the raw post-lick map and a `*_quietnorm*` map (post-lick minus
+the mean quiet-period baseline = lick-evoked relative to the not-running/not-licking
+state). Quiet-period thresholds are provisional (see the quiet-period section).
+
 ## Things still to verify
 
 - 6/3 PS92 / PS95 functional-channel identity (PS94 6/3 was verified correct).
