@@ -121,6 +121,15 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "When is position info present, and does the temporal profile beat the window-mean?")
         pic(s, fp, left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
 
+    s = prs.slides.add_slide(BLANK)
+    title(s, "6/4 engagement: first-40-min decoding",
+          "Late-session disengagement drags 6/4 down; restricting to the engaged window partly recovers it (not 6/3).")
+    pic(s, src / "locanmf_decoder_first40min_0604.png", left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
+    s = prs.slides.add_slide(BLANK)
+    title(s, "6/4 v1 vs v2 Allen-CCF alignment",
+          "ROI decoder (alignment-sensitive) is unchanged by v2 re-registration -> the 6/4 deficit is not an alignment artifact.")
+    pic(s, src / "locanmf_decoder_v1_vs_v2_alignment_0604.png", left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
+
     # top predictive component footprints, per session
     for day, dlab in DAYS:
         for lab in [f"{an}_{day}" for an in ("PS92", "PS94", "PS95")]:

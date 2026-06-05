@@ -215,7 +215,20 @@ def fig_top_components(label, out, topn=10):
     # Rank by UNIVARIATE block-CV accuracy ("does this component alone decode position?"), NOT by the
     # multivariate |weight| -- L2 + correlated features make weights surface suppressors/noise, not signal.
     uacc = np.array([_bcv_acc(X[:, [c]], y, g) for c in range(X.shape[1])])
-    top = np.argsort(uacc)[::-1][:topn]
+    # Significance filter (only components above the ~95th-pct null) + fragment dedup (drop a
+    # component whose trial-feature correlation with an already-selected, higher-acc component
+    # exceeds 0.8 -- LocaNMF over-splitting produces tiny correlated slivers that are not new signal).
+    n = len(y); sigthr = 1 / 6 + 1.645 * np.sqrt((1 / 6) * (5 / 6) / n)
+    Xz = (X - X.mean(0)) / (X.std(0) + 1e-9)
+    top = []
+    for c in np.argsort(uacc)[::-1]:
+        if uacc[c] <= sigthr:
+            break
+        if any(abs(Xz[:, c] @ Xz[:, sc]) / n > 0.8 for sc in top):
+            continue
+        top.append(int(c))
+        if len(top) >= topn:
+            break
     b = np.zeros_like(atlas, bool)
     b[:-1, :] |= atlas[:-1, :] != atlas[1:, :]; b[:, :-1] |= atlas[:, :-1] != atlas[:, 1:]
     ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
@@ -229,8 +242,11 @@ def fig_top_components(label, out, topn=10):
         ax.set_xticks([]); ax.set_yticks([])
     for ax in axes.ravel()[len(top):]:
         ax.axis("off")
-    fig.suptitle(f"{label}: top-{topn} LocaNMF components by UNIVARIATE block-CV decoding accuracy "
-                 f"(footprints, Allen-overlaid; '->pos' = position each most predicts)", fontsize=12)
+    if not top:
+        axes.ravel()[0].text(0.5, 0.5, "no components individually\nsignificant above chance\n(code is fully distributed)",
+                             ha="center", va="center", fontsize=12, transform=axes.ravel()[0].transAxes)
+    fig.suptitle(f"{label}: significant + fragment-deduped components by univariate block-CV accuracy "
+                 f"({len(top)} shown, sig-thr={sigthr:.2f}; footprints Allen-overlaid, '->pos'=position most predicted)", fontsize=11)
     fig.tight_layout(); p = out / f"locanmf_top_components_{label}.png"; fig.savefig(p, dpi=120); plt.close(fig)
     return p
 
