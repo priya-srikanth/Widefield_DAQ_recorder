@@ -565,3 +565,31 @@ python .\wfield_local\wfield_ncaas_fixed.py "E:\labcams_data\20260601\PS94_20260
 ```
 
 This launcher also supports AWS session tokens in the local credentials file.
+
+## End-of-day archival + cleanup (`archive_day.py`)
+
+Reusable daily off-load of a recording day from the local E: drive:
+
+- **Raw camera movies → M: standby** (cold, immutable originals)
+- **All other outputs + DAQ → N: MICROSCOPE** (corrected video, SVD, Allen
+  transform, cue/lick/quiet maps, motion QC, DAQ h5)
+- Once copies are **size-verified**, the copied E: files plus the reproducible
+  E:-only intermediates (cleanpairs `*.dat`, any `*_concat` raw) can be deleted
+  from E: to reclaim space.
+
+Nothing is hardcoded — pass `--date YYYYMMDD` and it walks
+`E:\labcams_data\<date>`, mirrors the tree to M:/N:, and re-verifies each
+destination before any deletion.
+
+```powershell
+python -m wfield_local.archive_day archive --date 20260604   # copy E -> M/N (LocaNMF inputs first)
+python -m wfield_local.archive_day verify  --date 20260604   # confirm every E file is copied
+python -m wfield_local.archive_day clean   --date 20260604   # DRY-RUN: show what would be deleted
+python -m wfield_local.archive_day clean   --date 20260604 --execute   # actually delete from E
+```
+
+`clean` deletes an E: file only after re-confirming its destination size matches,
+and removes a reproducible intermediate only once its regeneration sources (the
+session's raw on M:, a DAQ h5 for the date on N:) are confirmed archived. Drive
+roots default to this rig's mounts; override with `--m-raw`/`--n-lab`/etc.
+The one-off `_archive_0604.py` / `_delete_e_0604.py` drivers are superseded by this.
