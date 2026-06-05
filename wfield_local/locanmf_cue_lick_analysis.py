@@ -58,6 +58,14 @@ SESSIONS = [
          h5=f"{D}/20250603/PS94_20260603_175946.h5", regime="B", fmdir=None),
     dict(label="PS95_0603", mc=f"{L}/20260603/PS95_20260603_194442/motion_corrected",
          h5=f"{D}/20250603/PS95_20260603_194902.h5", regime="B", fmdir=None),
+    # 6/4 (full-FOV, regime A). PS92 DAQ was split into two recordings -> use the _concat h5
+    # (QC: pco/2T = 1.000 for all three, channels + cue/lick classification OK).
+    dict(label="PS92_0604", mc=f"{L}/20260604/PS92_20260604_132934/motion_corrected",
+         h5=f"{D}/20250604/PS92_20260604_concat.h5", regime="A", fmdir=None),
+    dict(label="PS94_0604", mc=f"{L}/20260604/PS94_20260604_151516/motion_corrected",
+         h5=f"{D}/20250604/PS94_20260604_152103.h5", regime="A", fmdir=None),
+    dict(label="PS95_0604", mc=f"{L}/20260604/PS95_20260604_165712/motion_corrected",
+         h5=f"{D}/20250604/PS95_20260604_170729.h5", regime="A", fmdir=None),
 ]
 
 
