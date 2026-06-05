@@ -34,6 +34,12 @@ SESSIONS = [
      fr"{D}\20260603\PS94_20260603\motion_corrected", "PS94_0603_affine8v1"),
     ("PS95 - 2026-06-03", "ROI crop; cleanpairs frame-map mapping",
      fr"{D}\20260603\PS95_20260603_194442\motion_corrected", "PS95_0603_affine8v1"),
+    ("PS92 - 2026-06-04 (concat)", "ROI crop; cleanpairs frame-map; force-split session concatenated (gap padded)",
+     fr"{D}\20260604\PS92_20260604_132934\motion_corrected", "PS92_0604_affine8v1"),
+    ("PS94 - 2026-06-04", "ROI crop; cleanpairs frame-map mapping",
+     fr"{D}\20260604\PS94_20260604_151516\motion_corrected", "PS94_0604_affine8v1"),
+    ("PS95 - 2026-06-04", "ROI crop; cleanpairs frame-map mapping",
+     fr"{D}\20260604\PS95_20260604_165712\motion_corrected", "PS95_0604_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
