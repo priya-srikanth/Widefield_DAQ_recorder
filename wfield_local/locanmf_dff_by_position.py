@@ -115,6 +115,40 @@ def main() -> int:
     png = args.output / f"locanmf_dff_by_position_{args.event}.png"
     fig.savefig(png, dpi=130); plt.close(fig)
     print("wrote", png, flush=True)
+
+    # ---- per-animal: rows = areas, cols = animals, 6 position lines (dF/F) ----
+    def per_animal_pos(an, pos, lab):
+        rows = [r["pos"][pos][np.where(r["regions"] == lab)[0]] for r in res
+                if r["animal"] == an and r["pos"][pos] is not None and (r["regions"] == lab).any()]
+        return np.concatenate(rows, 0).mean(0) if rows else None
+
+    fig, axes = plt.subplots(len(areas), len(animals), figsize=(5.0 * len(animals), 1.9 * len(areas)),
+                             squeeze=False, sharex=True)
+    for rr, (lab, nm) in enumerate(areas):
+        for cc, an in enumerate(animals):
+            ax = axes[rr][cc]
+            for pos in POS:
+                m = per_animal_pos(an, pos, lab)
+                if m is None:
+                    continue
+                is_contra = (("R" in pos and lab > 0) or ("L" in pos and lab < 0))
+                ax.plot(tax, sm(m) * 100, color=POS_COLOR[pos], lw=1.8 if is_contra else 1.0,
+                        ls="-" if is_contra else "--", label=pos + (" (contra)" if is_contra else ""))
+            ax.axvline(0, color="grey", ls=":", lw=0.6); ax.axhline(0, color="grey", lw=0.5)
+            if rr == 0:
+                ax.set_title(an, fontsize=11)
+            if cc == 0:
+                ax.set_ylabel(f"{nm}{'_L' if lab > 0 else '_R'}\n% dF/F", fontsize=8)
+            if rr == len(areas) - 1:
+                ax.set_xlabel(f"time from {args.event} (s)")
+            if rr == 0 and cc == len(animals) - 1:
+                ax.legend(fontsize=5, ncol=2)
+    fig.suptitle(f"{args.event}-triggered LocaNMF dF/F by spout position, PER ANIMAL "
+                 f"(solid/bold = contralateral spout)", fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.99])
+    png2 = args.output / f"locanmf_dff_by_position_{args.event}_per_animal.png"
+    fig.savefig(png2, dpi=120); plt.close(fig)
+    print("wrote", png2, flush=True)
     return 0
 
 
