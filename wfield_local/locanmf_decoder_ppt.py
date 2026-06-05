@@ -1,0 +1,131 @@
+"""Assemble the spout-position decoder summary deck from figures in a directory. Expects the
+per-day decoder figures (from locanmf_position_decoder.py, --align lick/cue/precue) and the
+analysis figures (from locanmf_decoder_weights.py) to be present; missing images are skipped."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
+
+NAVY = RGBColor(0x1F, 0x33, 0x55); GREY = RGBColor(0x55, 0x55, 0x55); RED = RGBColor(0xB0, 0x22, 0x22)
+DAYS = [("0601", "6/1"), ("0602", "6/2"), ("0603", "6/3"), ("0604", "6/4")]
+
+
+def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path:
+    src = Path(src)
+
+    def dfig(day, align, kind):
+        return src / f"locanmf_position_{kind}_{day}_locanmf_{align}_base-none_cv-block.png"
+
+    prs = Presentation(); prs.slide_width = Inches(13.333); prs.slide_height = Inches(7.5)
+    BLANK = prs.slide_layouts[6]
+
+    def title(slide, text, sub=None):
+        tf = slide.shapes.add_textbox(Inches(0.4), Inches(0.18), Inches(12.5), Inches(0.9)).text_frame
+        tf.word_wrap = True; r = tf.paragraphs[0].add_run(); r.text = text
+        r.font.size = Pt(26); r.font.bold = True; r.font.color.rgb = NAVY
+        if sub:
+            r2 = tf.add_paragraph().add_run(); r2.text = sub; r2.font.size = Pt(13); r2.font.color.rgb = GREY
+
+    def imgs(slide, paths, top=Inches(1.3)):
+        paths = [p for p in paths if p.exists()]
+        if not paths:
+            return
+        w = Inches(6.2); gap = Inches(0.25); total = len(paths) * w + (len(paths) - 1) * gap
+        left0 = (prs.slide_width - total) / 2
+        for i, p in enumerate(paths):
+            slide.shapes.add_picture(str(p), left0 + i * (w + gap), top, width=w)
+
+    def pic(slide, p, **kw):
+        if p.exists():
+            slide.shapes.add_picture(str(p), **kw)
+
+    # title
+    s = prs.slides.add_slide(BLANK)
+    tf = s.shapes.add_textbox(Inches(0.8), Inches(2.4), Inches(11.7), Inches(2.8)).text_frame; tf.word_wrap = True
+    r = tf.paragraphs[0].add_run(); r.text = "Spout-position decoding from cortex"
+    r.font.size = Pt(40); r.font.bold = True; r.font.color.rgb = NAVY
+    for t in ["Best strategy: individual LocaNMF components, NO per-trial baseline, block-aware CV, first-lick 2 s",
+              "PS92 / PS94 / PS95  —  baseline days 6/1-6/4 (all pre-stroke)",
+              "Multinomial logistic regression - 6 positions - chance = 0.17"]:
+        rr = tf.add_paragraph().add_run(); rr.text = t; rr.font.size = Pt(16); rr.font.color.rgb = GREY
+
+    # strategy + table
+    s = prs.slides.add_slide(BLANK)
+    title(s, "Why this strategy", "What changed from the first pass, and the resulting accuracy")
+    bt = s.shapes.add_textbox(Inches(0.45), Inches(1.2), Inches(6.0), Inches(5.8)).text_frame; bt.word_wrap = True
+    bullets = [
+        ("Individual components, not region-pooled", "all LocaNMF components are features; labels only subset SSp/MO."),
+        ("No per-trial baseline", "a session-constant (quiet) baseline is invisible to a standardized decoder; per-trial pre-cue over-subtracts real anticipatory signal."),
+        ("Block-aware CV", "positions come in ~6-trial blocks; random k-fold leaks each block's slow-drift fingerprint."),
+        ("First-lick, 2 s window", "integrates the lick bout (beats 1 s); >~2.5 s dilutes. Cue/pre-cue kept for the no-lick test."),
+        ("SSp carries it, MO secondary", "contralateral orofacial SSp dominates; MOp/MOs above chance, strongest for far."),
+        ("No-lick (post-cue) ~ chance; pre-cue no-lick above chance", "maintained position code readable without a lick."),
+    ]
+    first = True
+    for h, d in bullets:
+        p = bt.paragraphs[0] if first else bt.add_paragraph(); first = False
+        rr = p.add_run(); rr.text = "- " + h; rr.font.size = Pt(13.5); rr.font.bold = True; rr.font.color.rgb = NAVY
+        p2 = bt.add_paragraph(); r2 = p2.add_run(); r2.text = "   " + d; r2.font.size = Pt(11); r2.font.color.rgb = GREY
+    rows = [("", "PS92", "PS94", "PS95"), ("6/3 first-lick", "0.67", "0.83", "0.85"),
+            ("6/4 first-lick", "0.56", "0.29", "0.49"), ("6/1 first-lick", "-", "0.73", "0.91"),
+            ("6/2 first-lick", "0.46", "-", "-"), ("6/3 pre-cue no-lick", "0.27", "0.34", "0.22")]
+    tbl = s.shapes.add_table(len(rows), 4, Inches(6.8), Inches(1.5), Inches(6.0), Inches(3.0)).table
+    for ci in range(4):
+        tbl.columns[ci].width = Inches(1.5)
+    for ri, row in enumerate(rows):
+        for ci, val in enumerate(row):
+            cell = tbl.cell(ri, ci); cell.text = val if val else " "
+            par = cell.text_frame.paragraphs[0]; par.alignment = PP_ALIGN.CENTER; run = par.runs[0]; run.font.size = Pt(12)
+            if ri == 0 or ci == 0:
+                run.font.bold = True; run.font.color.rgb = NAVY
+            if "no-lick" in row[0] and ci > 0:
+                run.font.color.rgb = RED
+
+    # figure slides
+    for day, dlab in DAYS:
+        s = prs.slides.add_slide(BLANK)
+        title(s, f"{dlab} - first-lick 2 s (best engaged decoder)", "Left: confusion matrix.  Right: per-position recall.")
+        imgs(s, [dfig(day, "lick", "decoder"), dfig(day, "lick", "recall")])
+    for day, dlab in DAYS:
+        s = prs.slides.add_slide(BLANK)
+        title(s, f"{dlab} - cue 2 s (no-lick generalization test)", "Right: engaged (blue) vs no-lick (red).")
+        imgs(s, [dfig(day, "cue", "decoder"), dfig(day, "cue", "recall")])
+    for day, dlab in DAYS:
+        s = prs.slides.add_slide(BLANK)
+        title(s, f"{dlab} - PRE-CUE 1 s (motor-independent; applies to no-lick)", "No-lick above chance = maintained code.")
+        imgs(s, [dfig(day, "precue", "decoder"), dfig(day, "precue", "recall")])
+
+    # analysis slides
+    s = prs.slides.add_slide(BLANK)
+    title(s, "Which components carry each position - and where", "LR weight by Allen region (top-12 + MOp/MOs L/R).")
+    pic(s, src / "locanmf_decoder_weights_by_region.png", left=Inches(0.3), top=Inches(1.35), width=Inches(12.7))
+    s = prs.slides.add_slide(BLANK)
+    title(s, "SSp vs MO", "Accuracy by feature set + share of decoder weight by region group.")
+    pic(s, src / "locanmf_decoder_region_groups.png", left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
+    s = prs.slides.add_slide(BLANK)
+    title(s, "Why a 2 s window", "Decoding vs post-cue window length.")
+    pic(s, src / "locanmf_decoder_window_sweep.png", left=Inches(2.9), top=Inches(1.35), height=Inches(5.3))
+    s = prs.slides.add_slide(BLANK)
+    title(s, "Pre-stroke baseline variability (3 days/animal)", "The spread any post-stroke effect must clear.")
+    pic(s, src / "locanmf_decoder_baseline_variability.png", left=Inches(0.3), top=Inches(1.4), width=Inches(12.7))
+
+    # takeaways
+    s = prs.slides.add_slide(BLANK); title(s, "Takeaways")
+    tf = s.shapes.add_textbox(Inches(0.6), Inches(1.3), Inches(12.0), Inches(5.6)).text_frame; tf.word_wrap = True
+    takes = [
+        "Intended spout position decodes well above chance on every baseline session (first-lick 2 s, block-CV; up to 0.91).",
+        "SSp orofacial subfields, contralateral to the spout, dominate; MOp/MOs are secondary (strongest for far positions).",
+        "Post-cue no-lick decodes at chance (negative control); PRE-CUE no-lick decodes above chance = motor-independent maintained code.",
+        "Baseline day-to-day variability is large (PS94 0.29-0.83); 6/4 is the low/low-engagement day.",
+        "For the stroke pre/post: block-CV, no per-trial baseline, multiple baseline days, engagement matching, and the pre-cue readout.",
+    ]
+    first = True
+    for t in takes:
+        p = tf.paragraphs[0] if first else tf.add_paragraph(); first = False
+        r = p.add_run(); r.text = "- " + t; r.font.size = Pt(15); r.font.color.rgb = NAVY; p.space_after = Pt(10)
+
+    outp = src / out_name; prs.save(str(outp)); return outp
