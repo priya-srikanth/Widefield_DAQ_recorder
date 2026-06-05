@@ -269,7 +269,8 @@ def fig_temporal_dynamics(labels, out):
     ax.bar(x + w / 2, [mb[l[:4]][1] for l in labels], w, label="8x0.25s temporal bins", color="#d62728")
     ax.axhline(1 / 6, color="k", ls="--", lw=0.8); ax.set_xticks(x); ax.set_xticklabels([l[:4] for l in labels])
     ax.set_ylim(0, 1); ax.set_ylabel("accuracy (block-CV)"); ax.legend(fontsize=9); ax.set_title("Does temporal profile beat the window-mean?")
-    fig.suptitle("Rolling temporal dynamics of spout-position coding (first-lick aligned)", fontsize=12)
+    dlab = "/".join(sorted({l[-4:-2] + "/" + l[-2:] for l in labels}))
+    fig.suptitle(f"Rolling temporal dynamics of spout-position coding (first-lick aligned, {dlab}; one line per animal)", fontsize=12)
     fig.tight_layout(); p = out / "locanmf_decoder_temporal_dynamics.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
