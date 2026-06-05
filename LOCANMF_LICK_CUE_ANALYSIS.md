@@ -105,6 +105,24 @@ structurally intact, so this is a *functional* reorganization question, not lesi
   = genuine **anticipatory/preparatory** coding (blocked design); so no-baseline measures *total*
   position info at lick time, pre-cue-sub isolates the *evoked* change. `locanmf_position_decoder.py`
   defaults: `--baseline none --cv block`; toggles `--baseline precue`, `--cv random` for contrasts.
+- **F13. Pre-cue (anticipatory) decoding — the motor-independent post-stroke readout.** Train the
+  decoder on engaged (cue+lick) trials' **pre-cue 1 s window**, block-CV. Engaged: 6/3 0.40/0.55/0.56.
+  Crucially, applied to **no-lick** trials it decodes **above chance** (6/3 0.26/0.34/0.22) —
+  unlike the *post*-cue no-lick decode (F11, ≈chance). So the **maintained position code is readable
+  without a lick**, the ideal readout for post-stroke failed attempts (train on baseline engaged →
+  apply to post-stroke no-lick; intact ⇒ preparation survived, collapsed ⇒ representation degraded).
+  **Validated by a time-only control**: position is *not* decodable from cue-time alone (0.02–0.11),
+  so pre-cue signal is genuine cross-block coding, not slow drift. *Caveat:* pre-cue may also carry
+  ongoing inter-trial movement to the current spout → a post-stroke drop could be loss-of-movement,
+  not loss-of-representation; needs video.
+- **F14. Baseline (pre-stroke) variability is LARGE — 3 days/animal.** Post-lick 2 s decoding across
+  baseline days: PS92 (6/2,6/3,6/4) 0.46/0.67/0.56 (range 0.21); PS94 (6/1,6/3,6/4) 0.73/0.83/**0.29**
+  (range **0.55**); PS95 (6/1,6/3,6/4) **0.91**/0.85/0.49 (range 0.41). **6/4 is the low day for
+  PS94 & PS95** and tracks engagement (no-lick counts: PS94 6/1 n=5 → 6/4 n=145). 6/1 itself is *not*
+  too noisy to decode (PS95 6/1 = 0.91, the best). **Design implication:** a single pre-vs-post
+  contrast is uninterpretable; need multiple baseline days to set each animal's baseline distribution,
+  **engagement/movement matching**, and likely per-position/per-region contrasts (more stable than
+  overall accuracy) + the F13 pre-cue readout. Figures: `locanmf_decoder_baseline_variability.png`.
 
 ## 4. When is LocaNMF actually helpful (the synthesis)
 - **Not** for region-level evoked responses / ROI summaries → that equals an Allen-ROI average
