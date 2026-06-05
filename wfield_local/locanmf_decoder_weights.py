@@ -211,7 +211,11 @@ def fig_top_components(label, out, topn=10):
     names = _names(s)
     X, y, g, _, _, reg = _trial_features(s, _args("lick", 2.0))
     lr = _clf().fit(X, y).named_steps["logisticregression"]; ci = {int(c): i for i, c in enumerate(lr.classes_)}
-    coef = lr.coef_; importance = np.abs(coef).sum(0); top = np.argsort(importance)[::-1][:topn]
+    coef = lr.coef_
+    # Rank by UNIVARIATE block-CV accuracy ("does this component alone decode position?"), NOT by the
+    # multivariate |weight| -- L2 + correlated features make weights surface suppressors/noise, not signal.
+    uacc = np.array([_bcv_acc(X[:, [c]], y, g) for c in range(X.shape[1])])
+    top = np.argsort(uacc)[::-1][:topn]
     b = np.zeros_like(atlas, bool)
     b[:-1, :] |= atlas[:-1, :] != atlas[1:, :]; b[:, :-1] |= atlas[:, :-1] != atlas[:, 1:]
     ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
@@ -221,11 +225,12 @@ def fig_top_components(label, out, topn=10):
         ax.imshow(fp[y0:y1, x0:x1], cmap="magma")
         bb = np.where(b[y0:y1, x0:x1]); ax.scatter(bb[1], bb[0], s=0.2, c="white", alpha=0.35, marker=".")
         pos = DISPLAY_ORDER[int(np.argmax([coef[ci[p], comp] if p in ci else -9 for p in DISPLAY_ORDER]))]
-        ax.set_title(f"comp#{comp} {names.get(int(reg[comp]),'?')}\n->{POSITION_NAMES[pos]} |w|={importance[comp]:.2f}", fontsize=9)
+        ax.set_title(f"comp#{comp} {names.get(int(reg[comp]),'?')}\n->{POSITION_NAMES[pos]} acc={uacc[comp]:.2f}", fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
     for ax in axes.ravel()[len(top):]:
         ax.axis("off")
-    fig.suptitle(f"{label}: top-{topn} LocaNMF components by decoder weight (footprints, Allen-overlaid)", fontsize=13)
+    fig.suptitle(f"{label}: top-{topn} LocaNMF components by UNIVARIATE block-CV decoding accuracy "
+                 f"(footprints, Allen-overlaid; '->pos' = position each most predicts)", fontsize=12)
     fig.tight_layout(); p = out / f"locanmf_top_components_{label}.png"; fig.savefig(p, dpi=120); plt.close(fig)
     return p
 
@@ -269,9 +274,10 @@ def fig_temporal_dynamics(labels, out):
     ax.bar(x + w / 2, [mb[l[:4]][1] for l in labels], w, label="8x0.25s temporal bins", color="#d62728")
     ax.axhline(1 / 6, color="k", ls="--", lw=0.8); ax.set_xticks(x); ax.set_xticklabels([l[:4] for l in labels])
     ax.set_ylim(0, 1); ax.set_ylabel("accuracy (block-CV)"); ax.legend(fontsize=9); ax.set_title("Does temporal profile beat the window-mean?")
+    dtag = sorted({l[-4:] for l in labels})[0]
     dlab = "/".join(sorted({l[-4:-2] + "/" + l[-2:] for l in labels}))
     fig.suptitle(f"Rolling temporal dynamics of spout-position coding (first-lick aligned, {dlab}; one line per animal)", fontsize=12)
-    fig.tight_layout(); p = out / "locanmf_decoder_temporal_dynamics.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    fig.tight_layout(); p = out / f"locanmf_decoder_temporal_dynamics_{dtag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
 
@@ -290,7 +296,9 @@ def main() -> int:
     p, by_animal = fig_baseline_variability(args.output)
     print("wrote", p, flush=True)
     print("baseline variability:", {a: {d: round(v[0], 2) for d, v in dd.items()} for a, dd in by_animal.items()}, flush=True)
-    print("wrote", fig_temporal_dynamics(_avail("0603"), args.output), flush=True)
+    for d in ("0601", "0602", "0603", "0604"):
+        if _avail(d):
+            print("wrote", fig_temporal_dynamics(_avail(d), args.output), flush=True)
     for lab in [s["label"] for s in SESSIONS if s["label"][-4:] in ("0601", "0602", "0603", "0604")]:
         print("wrote", fig_top_components(lab, args.output), flush=True)
     if args.ppt:

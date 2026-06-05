@@ -112,9 +112,14 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
     s = prs.slides.add_slide(BLANK)
     title(s, "Pre-stroke baseline variability (3 days/animal)", "The spread any post-stroke effect must clear.")
     pic(s, src / "locanmf_decoder_baseline_variability.png", left=Inches(0.3), top=Inches(1.4), width=Inches(12.7))
-    s = prs.slides.add_slide(BLANK)
-    title(s, "Rolling temporal dynamics", "When is position info present, and does the temporal profile beat the window-mean?")
-    pic(s, src / "locanmf_decoder_temporal_dynamics.png", left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
+    for day, dlab in DAYS:
+        fp = src / f"locanmf_decoder_temporal_dynamics_{day}.png"
+        if not fp.exists():
+            continue
+        s = prs.slides.add_slide(BLANK)
+        title(s, f"Rolling temporal dynamics - {dlab}",
+              "When is position info present, and does the temporal profile beat the window-mean?")
+        pic(s, fp, left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
 
     # top predictive component footprints, per session
     for day, dlab in DAYS:
@@ -123,8 +128,8 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
             if not fp.exists():
                 continue
             s = prs.slides.add_slide(BLANK)
-            title(s, f"{lab[:4]} {dlab} - top-10 predictive component footprints",
-                  "Actual LocaNMF spatial maps (Allen-overlaid); '->pos' = position each most predicts.")
+            title(s, f"{lab[:4]} {dlab} - top-10 components by univariate decoding accuracy",
+                  "Ranked by per-component block-CV accuracy (NOT |weight|, which surfaces suppressors). Allen-overlaid footprints.")
             pic(s, fp, left=Inches(0.3), top=Inches(1.6), width=Inches(12.7))
 
     # takeaways
