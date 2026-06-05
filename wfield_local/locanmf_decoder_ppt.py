@@ -129,6 +129,11 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
     title(s, "6/4 v1 vs v2 Allen-CCF alignment",
           "ROI decoder (alignment-sensitive) is unchanged by v2 re-registration -> the 6/4 deficit is not an alignment artifact.")
     pic(s, src / "locanmf_decoder_v1_vs_v2_alignment_0604.png", left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
+    s = prs.slides.add_slide(BLANK)
+    title(s, "Pre-cue (ENL) signal + lick timing -> ENL length",
+          "Lick-free window is only ~1.4s now; the maintained position code is real but ramps toward the cue. "
+          "A longer ENL (2-3s) would give a cleaner motor-independent pre-cue readout.")
+    pic(s, src / "locanmf_precue_ENL_analysis_0603.png", left=Inches(0.4), top=Inches(1.6), width=Inches(12.5))
 
     # top predictive component footprints, per session
     for day, dlab in DAYS:
