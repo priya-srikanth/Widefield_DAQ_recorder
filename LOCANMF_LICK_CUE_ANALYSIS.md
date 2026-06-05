@@ -74,11 +74,16 @@ structurally intact, so this is a *functional* reorganization question, not lesi
   the lateral edge of the dorsal window). Not evidence against an auditory response.
 - **F10. Spout position decodes strongly from cortex.** 6-way logistic-regression on individual
   LocaNMF components, engaged trials. **Canonical method (see F12): no per-trial baseline,
-  block-aware CV, first-lick-aligned** → **0.70 / 0.76 / 0.82** (PS92/PS94/PS95 6/3; chance 0.17),
-  0.60 / 0.37 / 0.53 on 6/4 (PS94 6/4 is a low-engagement outlier day). **SSp carries it
-  (0.61–0.70) >> MO (0.42–0.56).** Confusions are between adjacent spouts. First-lick > cue
-  alignment for the engaged decode (0.70–0.82 vs 0.50–0.69 on 6/3); cue alignment is kept only
-  for the no-lick test (F11). *(The earlier 0.59/0.69/0.79 used random-CV + pre-cue baseline and
+  block-aware CV, first-lick-aligned, 2 s window** → **0.67 / 0.83 / 0.85** (PS92/PS94/PS95 6/3;
+  chance 0.17), 0.56 / 0.29 / 0.49 on 6/4 (PS94 6/4 is a low-engagement outlier day — its
+  between-position component signal is ~4× weaker than 6/3, not a decoder bug). **SSp carries it
+  (SSp-only 0.62–0.77) >> MO (MO-only 0.33–0.52, still above chance).** Top features are
+  **orofacial SSp subfields (SSp-m mouth, SSp-n nose, SSp-un, SSp-bfd barrel), CONTRALATERAL to
+  the spout** (left spouts→right-hemi SSp, right→left); MOp/MOs contribute ~9–16 % of weight,
+  most for *far* positions. Confusions are between adjacent spouts. First-lick > cue alignment
+  (6/3 0.67–0.85 vs 0.64–0.79); cue alignment kept only for the no-lick test (F11).
+  **Window: ~2 s is the optimum** (integrates the lick bout; 1 s under-reads — PS94 0.76→0.83 —
+  and >~2.5 s dilutes the transient; ITI ~7 s so not cross-trial bleed). *(The earlier 0.59/0.69/0.79 used random-CV + pre-cue baseline and
   was both deflated by over-subtraction and distorted by block leakage — superseded by F12.)*
 - **F11. No-lick trials decode at ≈ chance** (train on engaged, apply to no-lick, cue-aligned:
   6/3 0.29/0.11/0.20, 6/4 0.21/0.14/0.12; chance 0.17). (a) A clean **negative control** — the

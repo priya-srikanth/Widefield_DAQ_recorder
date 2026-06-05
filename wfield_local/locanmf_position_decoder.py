@@ -119,7 +119,8 @@ def main() -> int:
     ap.add_argument("--cv", choices=("block", "random"), default="block")
     ap.add_argument("--fs", type=float, default=31.23)
     ap.add_argument("--pre-s", type=float, default=1.0)
-    ap.add_argument("--post-s", type=float, default=1.0, help="feature window after the alignment event")
+    ap.add_argument("--post-s", type=float, default=2.0, help="feature window after the alignment event "
+                    "(2.0 = empirical optimum; spans the lick bout. >~2.5s dilutes the transient, see window sweep)")
     ap.add_argument("--max-rt", type=float, default=2.0)
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
@@ -179,8 +180,8 @@ def main() -> int:
         ax.set_xlabel("predicted"); ax.set_ylabel("true")
         ax.set_title(f"{s['label']}  acc={accs['all']:.2f} (chance .17)\nSSp={accs['SSp']:.2f} MO={accs['MO']:.2f}", fontsize=9)
         fig.colorbar(im, ax=ax, shrink=0.7)
-    fig.suptitle(f"Spout-position decoding [{args.source}, {args.align}-aligned, baseline={args.baseline}, "
-                 f"{args.cv}-CV, engaged], {args.date}", fontsize=12)
+    fig.suptitle(f"Spout-position decoding [{args.source}, {args.align}-aligned 0-{args.post_s:g}s, "
+                 f"baseline={args.baseline}, {args.cv}-CV, engaged], {args.date}", fontsize=12)
     fig.tight_layout()
     tag = f"{args.source}_{args.align}_base-{args.baseline}_cv-{args.cv}"
     fig.savefig(args.output / f"locanmf_position_decoder_{args.date}_{tag}.png", dpi=130); plt.close(fig)
