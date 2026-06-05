@@ -102,11 +102,19 @@ def main() -> int:
         ax.set_title(f"{nm}{'_L' if lab > 0 else '_R'} (reg {lab}, n={int(sel.sum())} comp)", fontsize=9)
         if sel.sum() == 0:
             ax.text(0.5, 0.5, "none", ha="center", va="center", transform=ax.transAxes); continue
+        # faint individual components (per-component, not pooled), behind the per-animal means
         for tr, an in zip(traces[sel], animal[sel]):
-            ax.plot(time, _sm(tr, args.smooth_sigma), color=ANIMAL_COLOR.get(an, "grey"), alpha=0.5, lw=0.9)
-        gm = traces[sel].mean(0); gs = traces[sel].std(0) / np.sqrt(sel.sum())
-        ax.plot(time, _sm(gm, args.smooth_sigma), color="k", lw=2.2, label="grand mean")
-        ax.fill_between(time, _sm(gm - gs, args.smooth_sigma), _sm(gm + gs, args.smooth_sigma), color="k", alpha=0.2)
+            ax.plot(time, _sm(tr, args.smooth_sigma), color=ANIMAL_COLOR.get(an, "grey"), alpha=0.18, lw=0.7)
+        # SEPARATE per-animal mean +/- SEM (averaging each animal's components) -- responses
+        # are not uniform across animals, so do not pool them into one grand mean.
+        for an in [a for a in ANIMAL_COLOR if (sel & (animal == a)).any()]:
+            amask = sel & (animal == an); ta = traces[amask]
+            ma = ta.mean(0); sa = ta.std(0) / np.sqrt(amask.sum())
+            ax.plot(time, _sm(ma, args.smooth_sigma), color=ANIMAL_COLOR[an], lw=2.0,
+                    label=f"{an} (n={int(amask.sum())})")
+            ax.fill_between(time, _sm(ma - sa, args.smooth_sigma), _sm(ma + sa, args.smooth_sigma),
+                            color=ANIMAL_COLOR[an], alpha=0.18)
+        ax.legend(fontsize=6)
         ax.axvline(0, color="grey", lw=0.6, ls="--"); ax.axhline(0, color="grey", lw=0.5)
         ax.set_xlabel("time from lick (s)"); ax.set_ylabel("quiet z-score")
     handles = [plt.Line2D([], [], color=c, label=a) for a, c in ANIMAL_COLOR.items()]

@@ -97,10 +97,21 @@ def _quiet_zscore(C: np.ndarray, quiet: np.ndarray) -> tuple[np.ndarray, dict]:
 
 def analyze(args) -> int:
     args.output.mkdir(parents=True, exist_ok=True)
-    ev = _load_daq_events(
-        args.daq_h5, args.lick_channel, args.lick_thresh_upper_v, args.lick_thresh_lower_v,
-        tuple(args.lockout_s), args.refractory_s,
-    )
+    if args.event == "cue":
+        # cue TTLs (trial start), same spout-position classification as the spout maps
+        from wfield_local.plot_spout_trial_averages import (
+            _load_daq_events as _load_cue_events, _classify_cues,
+        )
+        ev = _load_cue_events(args.daq_h5)
+        event_samples = np.asarray(ev["cue_samples"], dtype=np.int64)
+        codes = _classify_cues(event_samples, ev["strobe_samples"], ev["strobe_codes"])
+    else:
+        ev = _load_daq_events(
+            args.daq_h5, args.lick_channel, args.lick_thresh_upper_v, args.lick_thresh_lower_v,
+            tuple(args.lockout_s), args.refractory_s,
+        )
+        event_samples = np.asarray(ev["lick_samples"], dtype=np.int64)
+        codes = _classify_events(event_samples, ev["strobe_samples"], ev["strobe_codes"])
     fsd = ev["sample_rate_hz"]
     C = np.load(args.locanmf_dir / f"{args.label}_locanmf_C.npy")          # (ncomp, T)
     regions = np.load(args.locanmf_dir / f"{args.label}_locanmf_regions.npy")
@@ -112,12 +123,11 @@ def analyze(args) -> int:
         offset = args.offset if args.offset is not None else json.loads(
             Path(args.cleanpairs_summary).read_text())["chosen_exposure_offset"]
         csample = _corrected_frame_samples(args.frame_map, ev["pco_samples"], int(offset))
-        lick_frames = _nearest_corrected_frame(ev["lick_samples"], csample)
+        event_frames = _nearest_corrected_frame(event_samples, csample)
     else:
         offset = None
         csample = None
-        lick_frames = _event_frame_indices_from_pco(ev["lick_samples"], ev["pco_samples"]) // 2
-    codes = _classify_events(ev["lick_samples"], ev["strobe_samples"], ev["strobe_codes"])
+        event_frames = _event_frame_indices_from_pco(event_samples, ev["pco_samples"]) // 2
 
     pre_n = int(round(args.pre_s * args.fs))
     post_n = int(round(args.post_s * args.fs))
@@ -132,16 +142,16 @@ def analyze(args) -> int:
             return (csample[b - 1] - csample[a]) / fsd <= (args.pre_s + args.post_s + 1.0)
         return True
 
-    valid = (codes >= 0) & np.array([window_ok(int(f)) for f in lick_frames])
-    print(f"[{args.label}] regime {regime}  licks={lick_frames.size} valid_with_window={int(valid.sum())} "
-          f"quiet_frames={qinfo['quiet_frames']}", flush=True)
+    valid = (codes >= 0) & np.array([window_ok(int(f)) for f in event_frames])
+    print(f"[{args.label}] event={args.event} regime {regime}  n={event_frames.size} "
+          f"valid_with_window={int(valid.sum())} quiet_frames={qinfo['quiet_frames']}", flush=True)
 
     out = {"time": tax.astype(np.float32), "regions": regions.astype(np.int64)}
     counts = {}
     trials_store = {}
     for code in DISPLAY_ORDER:
         name = POSITION_NAMES[code]
-        fr = lick_frames[valid & (codes == code)]
+        fr = event_frames[valid & (codes == code)]
         counts[name] = int(fr.size)
         if fr.size == 0:
             out[f"{name}_mean"] = np.zeros((ncomp, win), np.float32)
@@ -153,20 +163,21 @@ def analyze(args) -> int:
         if args.save_trials:
             trials_store[f"{name}_trials"] = trials.astype(np.float32)
 
-    npz = args.output / f"{args.label}_locanmf_lick_aligned.npz"
+    npz = args.output / f"{args.label}_locanmf_{args.event}_aligned.npz"
     np.savez_compressed(npz, **out, **trials_store)
 
     summary = {
-        "label": args.label, "daq_h5": str(args.daq_h5), "locanmf_dir": str(args.locanmf_dir),
+        "label": args.label, "event": args.event, "daq_h5": str(args.daq_h5),
+        "locanmf_dir": str(args.locanmf_dir),
         "regime": regime, "offset": offset, "fs": args.fs, "pre_s": args.pre_s, "post_s": args.post_s,
         "n_components": int(ncomp), "T": int(T), "lick_channel": args.lick_channel,
-        "detected_licks": int(ev["lick_samples"].size), "valid_licks_with_window": int(valid.sum()),
+        "detected_events": int(event_samples.size), "valid_events_with_window": int(valid.sum()),
         "counts_by_position": counts, "quiet": qinfo,
         "normalization": "per-component quiet-frame z-score (subtract quiet mean, divide quiet SD)",
         "saved_trials": bool(args.save_trials),
         "outputs": [npz.name],
     }
-    (args.output / f"{args.label}_locanmf_lick_aligned_summary.json").write_text(json.dumps(summary, indent=2))
+    (args.output / f"{args.label}_locanmf_{args.event}_aligned_summary.json").write_text(json.dumps(summary, indent=2))
 
     _quicklook(args, out, regions, counts)
     print(f"[{args.label}] wrote {npz}", flush=True)
@@ -200,11 +211,11 @@ def _quicklook(args, out, regions, counts):
             ax.plot(tax, m, label=f"{name} (n={counts[name]})", lw=1.3)
             ax.fill_between(tax, m - s, m + s, alpha=0.15)
         ax.axvline(0, color="k", lw=0.6, ls="--"); ax.axhline(0, color="grey", lw=0.5)
-        ax.set_xlabel("time from lick (s)"); ax.set_ylabel("quiet z-score")
+        ax.set_xlabel(f"time from {args.event} (s)"); ax.set_ylabel("quiet z-score")
         ax.legend(fontsize=6, ncol=2)
-    fig.suptitle(f"{args.label}: lick-triggered LocaNMF traces by spout position (most responsive comp/area)")
+    fig.suptitle(f"{args.label}: {args.event}-triggered LocaNMF traces by spout position (most responsive comp/area)")
     fig.tight_layout()
-    png = args.output / f"{args.label}_locanmf_lick_aligned_orofacial.png"
+    png = args.output / f"{args.label}_locanmf_{args.event}_aligned_orofacial.png"
     fig.savefig(png, dpi=130); plt.close(fig)
     print(f"[{args.label}] wrote {png}", flush=True)
 
@@ -214,6 +225,8 @@ def main() -> int:
     p.add_argument("--daq-h5", type=Path, required=True)
     p.add_argument("--locanmf-dir", type=Path, required=True)
     p.add_argument("--label", required=True, help="e.g. PS94_0603 (file stem of *_locanmf_C.npy)")
+    p.add_argument("--event", choices=("lick", "cue"), default="lick",
+                   help="trigger on detected licks (lick_analog) or trial cue TTLs")
     p.add_argument("--quiet-frame", type=Path, required=True, help="*_quiet_frame.npy (per-corrected-frame mask)")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--frame-map", type=Path, default=None, help="regime B: cleanpairs frame_map.npz (omit for regime A)")
