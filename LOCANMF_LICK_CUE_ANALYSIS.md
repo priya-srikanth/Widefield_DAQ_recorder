@@ -72,19 +72,34 @@ structurally intact, so this is a *functional* reorganization question, not lesi
 - **F9. Auditory positive-control inconclusive due to coverage.** Cue is auditory (tone), but
   AUD ROI signal is **~3–4× weaker than SSp** every session (auditory cortex under-sampled at
   the lateral edge of the dorsal window). Not evidence against an auditory response.
-- **F10. Spout position decodes strongly from cortex.** 6-way logistic-regression, cue-aligned,
-  engaged trials, 5-fold: **0.59 / 0.69 / 0.79** (chance 0.17) for PS92/PS94/PS95 6/3. **SSp
-  carries it (0.51–0.63) >> MO (0.30–0.47).** Confusions are between adjacent spouts. LocaNMF
-  features modestly beat SVD-ROI (esp. MO); cue-aligned ≈ lick-aligned.
-- **F11. No-lick trials decode at ≈ chance** (train on engaged, apply to no-lick: 0.16/0.23/0.26
-  LocaNMF, 0.13–0.21 ROI; chance 0.17). (a) A clean **negative control** — the decoder isn't
-  exploiting a confound (else no-lick would still decode). (b) Confirms the position code is
-  **lick/engagement-driven** (F1). (c) IMPORTANT: baseline no-lick = **disengagement** (chose
-  not to engage → no attempt → no code); post-stroke no-lick = **failed attempts** (tried,
+- **F10. Spout position decodes strongly from cortex.** 6-way logistic-regression on individual
+  LocaNMF components, engaged trials. **Canonical method (see F12): no per-trial baseline,
+  block-aware CV, first-lick-aligned** → **0.70 / 0.76 / 0.82** (PS92/PS94/PS95 6/3; chance 0.17),
+  0.60 / 0.37 / 0.53 on 6/4 (PS94 6/4 is a low-engagement outlier day). **SSp carries it
+  (0.61–0.70) >> MO (0.42–0.56).** Confusions are between adjacent spouts. First-lick > cue
+  alignment for the engaged decode (0.70–0.82 vs 0.50–0.69 on 6/3); cue alignment is kept only
+  for the no-lick test (F11). *(The earlier 0.59/0.69/0.79 used random-CV + pre-cue baseline and
+  was both deflated by over-subtraction and distorted by block leakage — superseded by F12.)*
+- **F11. No-lick trials decode at ≈ chance** (train on engaged, apply to no-lick, cue-aligned:
+  6/3 0.29/0.11/0.20, 6/4 0.21/0.14/0.12; chance 0.17). (a) A clean **negative control** — the
+  decoder isn't exploiting a confound (else no-lick would still decode). (b) Confirms the position
+  code is **lick/engagement-driven** (F1). (c) IMPORTANT: baseline no-lick = **disengagement**
+  (chose not to engage → no attempt → no code); post-stroke no-lick = **failed attempts** (tried,
   motor failed) — those are the real test (if they decode *above* this chance baseline, intent
   is preserved in cortex despite motor failure). **Must separate failed-attempt from disengaged
-  via movement/video.** `locanmf_position_decoder.py` now emits engaged + no-lick recall as a
-  standard output.
+  via movement/video.** No-lick is intrinsically **cue-aligned** (no lick to align to).
+- **F12. Decoder methodology (load-bearing for the stroke pre/post).** (i) **Positions are
+  presented in ~6-trial BLOCKS** (P(stay)≈0.84). With random k-fold, same-block trials land in
+  train *and* test, so the decoder reads each block's **slow-drift fingerprint** rather than
+  evoked coding → inflation. Symptom: the *pre-cue* window "decoded" 0.47–0.65 under random-CV.
+  **Use block-aware CV (leave-whole-blocks-out).** (ii) **No per-trial baseline.** A
+  *session-constant* baseline (quiet-period) is removed by feature standardization — *identical*
+  decoding to none (proven: 0.692=0.692). A *per-trial pre-cue* baseline **over-subtracts** real
+  anticipatory position signal (block-CV no-base 0.71–0.82 vs pre-cue-sub 0.61–0.79 on 6/3).
+  (iii) The pre-cue window decodes position **above chance even under block-CV** (6/3 0.40–0.56)
+  = genuine **anticipatory/preparatory** coding (blocked design); so no-baseline measures *total*
+  position info at lick time, pre-cue-sub isolates the *evoked* change. `locanmf_position_decoder.py`
+  defaults: `--baseline none --cv block`; toggles `--baseline precue`, `--cv random` for contrasts.
 
 ## 4. When is LocaNMF actually helpful (the synthesis)
 - **Not** for region-level evoked responses / ROI summaries → that equals an Allen-ROI average

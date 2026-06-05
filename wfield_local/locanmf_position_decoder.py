@@ -1,15 +1,20 @@
 """Decode intended spout position from cortical activity (LocaNMF components or SVD/Allen ROIs).
 
-Baseline validation of the per-position model for the stroke study. Features = activity in a
-CUE-aligned window (pre-cue baseline-subtracted) on ENGAGED trials (cue followed by a lick
-within --max-rt; no-lick excluded). Cue-aligned so the same decoder later applies to ALL
-trials incl post-stroke no-lick failed attempts. Validation = 5-fold (20% held out per fold),
-each trial scored on held-out data. Multinomial logistic regression; reports accuracy vs
+Baseline validation of the per-position model for the stroke study. Features = mean activity
+in a window after the cue (default) or first lick, on ENGAGED trials (cue followed by a lick
+within --max-rt; no-lick held aside). Multinomial logistic regression; reports accuracy vs
 chance, confusion matrix, and per-area decoding (SSp / MO / all).
 
   --source locanmf : footprint-scaled dF/F per LocaNMF component (session-specific basis)
   --source roi     : SVD Allen-region ROI dF/F (mean_pixels(U_region) @ SVTcorr; atlas-anchored)
   --align cue|lick : feature window relative to cue (default) or first lick
+  --baseline none|precue : per-trial pre-cue subtraction. DEFAULT none -- a per-trial pre-cue
+      baseline over-subtracts genuine (anticipatory) position signal, and a *session-constant*
+      baseline (e.g. quiet-period) is invisible to a standardized decoder anyway.
+  --cv block|random : DEFAULT block. Spout positions are presented in BLOCKS (~6 trials), so
+      random k-fold leaks each block's slow-drift fingerprint across train/test (trials in the
+      same block are not independent) -- inflating accuracy, especially with no baseline.
+      Block-aware CV (leave-whole-blocks-out) forces generalization to unseen blocks.
 
     python -m wfield_local.locanmf_position_decoder --date 0603 --source locanmf --output "<dir>"
 """
@@ -27,7 +32,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import StratifiedKFold, GroupKFold, cross_val_predict
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix, accuracy_score
@@ -68,26 +73,40 @@ def _trial_features(s, args):
     cue = _load_cue_events(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
     cue_f, lick_f, csmp = _frames(s, cue, lk)
     codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    # block id: consecutive same-position cues = one block (positions are presented in ~6-trial blocks)
+    blk_id = np.full(cue_f.size, -1, dtype=int); b = -1; prev = None
+    for k in range(cue_f.size):
+        if codes[k] < 0:
+            continue
+        if prev is None or codes[k] != prev:
+            b += 1
+        blk_id[k] = b; prev = int(codes[k])
     pre_n = int(round(args.pre_s * args.fs)); post_n = int(round(args.post_s * args.fs))
     maxrt_n = int(round(args.max_rt * args.fs))
     ls = np.sort(lick_f); j = np.searchsorted(ls, cue_f, side="right")
     first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cue_f
-    X, y, Xn, yn = [], [], [], []
+    subtract = args.baseline == "precue"
+    X, y, g, Xn, yn = [], [], [], [], []
     for k in range(cue_f.size):
         if codes[k] < 0:
             continue
         c0 = int(cue_f[k])
-        if c0 - pre_n < 0 or c0 + post_n > T:
+        if c0 < 0 or c0 + post_n > T:
             continue
-        base = sig[:, c0 - pre_n:c0].mean(1)
+        if subtract:
+            if c0 - pre_n < 0:
+                continue
+            base = sig[:, c0 - pre_n:c0].mean(1)
+        else:
+            base = 0.0
         if first[k] > 0 and 0 < rt[k] <= maxrt_n:           # ENGAGED: cue + lick
             align = c0 if args.align == "cue" else int(first[k])
             if align + post_n > T:
                 continue
-            X.append(sig[:, align:align + post_n].mean(1) - base); y.append(int(codes[k]))
+            X.append(sig[:, align:align + post_n].mean(1) - base); y.append(int(codes[k])); g.append(int(blk_id[k]))
         else:                                               # NO-LICK: cue-aligned only (no lick to align)
             Xn.append(sig[:, c0:c0 + post_n].mean(1) - base); yn.append(int(codes[k]))
-    return np.array(X), np.array(y), np.array(Xn), np.array(yn), feat_reg
+    return np.array(X), np.array(y), np.array(g), np.array(Xn), np.array(yn), feat_reg
 
 
 def main() -> int:
@@ -96,6 +115,8 @@ def main() -> int:
     ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--source", choices=("locanmf", "roi"), default="locanmf")
     ap.add_argument("--align", choices=("cue", "lick"), default="cue")
+    ap.add_argument("--baseline", choices=("none", "precue"), default="none")
+    ap.add_argument("--cv", choices=("block", "random"), default="block")
     ap.add_argument("--fs", type=float, default=31.23)
     ap.add_argument("--pre-s", type=float, default=1.0)
     ap.add_argument("--post-s", type=float, default=1.0, help="feature window after the alignment event")
@@ -103,13 +124,20 @@ def main() -> int:
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     sess = [s for s in SESSIONS if s["label"].endswith(args.date)]
-    print(f"source={args.source} align={args.align}  sessions={[s['label'] for s in sess]}  chance=0.167", flush=True)
+    print(f"source={args.source} align={args.align} baseline={args.baseline} cv={args.cv}  "
+          f"sessions={[s['label'] for s in sess]}  chance=0.167", flush=True)
+
+    def _cv_predict(clf, Xc, yv, gv):
+        if args.cv == "block":
+            ng = min(5, int(np.unique(gv).size))
+            return cross_val_predict(clf, Xc, yv, cv=GroupKFold(ng), groups=gv)
+        return cross_val_predict(clf, Xc, yv, cv=StratifiedKFold(5, shuffle=True, random_state=0))
 
     groups = {"all": None, "SSp": ("SSp",), "MO": ("MOp", "MOs")}
     fig, axes = plt.subplots(1, len(sess), figsize=(5 * len(sess), 4.6), squeeze=False)
     summary = {}
     for si, s in enumerate(sess):
-        X, y, Xnl, ynl, feat_reg = _trial_features(s, args)
+        X, y, gblk, Xnl, ynl, feat_reg = _trial_features(s, args)
         names = {int(k): v for k, v in json.load(
             open(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_area_names.json")[0]))}
         nl_ok = args.align == "cue" and Xnl.shape[0] >= 6   # no-lick eval valid only for cue-aligned features
@@ -120,7 +148,7 @@ def main() -> int:
             if cols.size == 0:
                 accs[g] = recall[g] = float("nan"); acc_nl[g] = float("nan"); recall_nl[g] = [float("nan")] * 6; continue
             clf = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000, C=0.5))
-            pred = cross_val_predict(clf, X[:, cols], y, cv=StratifiedKFold(5, shuffle=True, random_state=0))
+            pred = _cv_predict(clf, X[:, cols], y, gblk)
             accs[g] = accuracy_score(y, pred)
             cmg = confusion_matrix(y, pred, labels=DISPLAY_ORDER); cmg = cmg / np.maximum(cmg.sum(1, keepdims=True), 1)
             recall[g] = np.diag(cmg).tolist()      # engaged per-position recall (5-fold, out-of-sample)
@@ -151,10 +179,10 @@ def main() -> int:
         ax.set_xlabel("predicted"); ax.set_ylabel("true")
         ax.set_title(f"{s['label']}  acc={accs['all']:.2f} (chance .17)\nSSp={accs['SSp']:.2f} MO={accs['MO']:.2f}", fontsize=9)
         fig.colorbar(im, ax=ax, shrink=0.7)
-    fig.suptitle(f"Spout-position decoding [{args.source}, {args.align}-aligned, engaged trials, 5-fold], {args.date}",
-                 fontsize=12)
+    fig.suptitle(f"Spout-position decoding [{args.source}, {args.align}-aligned, baseline={args.baseline}, "
+                 f"{args.cv}-CV, engaged], {args.date}", fontsize=12)
     fig.tight_layout()
-    tag = f"{args.source}_{args.align}"
+    tag = f"{args.source}_{args.align}_base-{args.baseline}_cv-{args.cv}"
     fig.savefig(args.output / f"locanmf_position_decoder_{args.date}_{tag}.png", dpi=130); plt.close(fig)
 
     # ---- per-position recall: engaged (5-fold) vs no-lick (trained on engaged) ----
@@ -168,7 +196,8 @@ def main() -> int:
                label=f"no-lick (n={sm['n_nolick']})")
         ax.axhline(1 / 6, color="grey", ls="--", lw=0.8, label="chance")
         ax.set_xticks(x); ax.set_xticklabels(posnames, rotation=45, ha="right", fontsize=7); ax.set_ylim(0, 1)
-        ax.set_title(f"{s['label']}  eng={sm['acc']['all']:.2f}  no-lick={sm['acc_nolick']['all']:.2f}", fontsize=9)
+        nls = f"{sm['acc_nolick']['all']:.2f}" if not np.isnan(sm['acc_nolick']['all']) else "n/a"
+        ax.set_title(f"{s['label']}  eng={sm['acc']['all']:.2f}  no-lick={nls}", fontsize=9)
         if si == 0:
             ax.set_ylabel("per-position recall"); ax.legend(fontsize=7)
     fig2.suptitle(f"Per-position recall — engaged vs no-lick [{tag}], {args.date} "
