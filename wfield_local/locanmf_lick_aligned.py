@@ -69,10 +69,21 @@ def _nearest_corrected_frame(event_samples: np.ndarray, csample: np.ndarray) -> 
 
 
 def _quiet_zscore(C: np.ndarray, quiet: np.ndarray) -> tuple[np.ndarray, dict]:
-    """Per-component: subtract quiet-frame mean, divide by quiet-frame SD."""
+    """Per-component: subtract quiet-frame mean, divide by quiet-frame SD.
+
+    The quiet mask is used ONLY to estimate each component's baseline mean/SD over the
+    (thousands of) quiet frames, so when its length differs slightly from T (some regime-A
+    masks were built on a marginally different frame count than SVTcorr) we align to the
+    common prefix -- the baseline statistics are unaffected by dropping a few tail frames.
+    """
     quiet = np.asarray(quiet).astype(bool)
-    if quiet.shape[0] != C.shape[1]:
-        raise ValueError(f"quiet mask length {quiet.shape[0]} != C T {C.shape[1]}")
+    T = C.shape[1]
+    length_mismatch = int(quiet.shape[0] - T)
+    if quiet.shape[0] != T:
+        L = min(quiet.shape[0], T)
+        qmask = np.zeros(T, bool)
+        qmask[:L] = quiet[:L]
+        quiet = qmask
     nq = int(quiet.sum())
     if nq < 2:
         raise ValueError(f"only {nq} quiet frames; cannot z-score")
@@ -80,7 +91,8 @@ def _quiet_zscore(C: np.ndarray, quiet: np.ndarray) -> tuple[np.ndarray, dict]:
     sd = C[:, quiet].std(axis=1, keepdims=True)
     sd_safe = np.where(sd > 0, sd, 1.0)
     Cn = (C - mu) / sd_safe
-    return Cn.astype(np.float32), {"quiet_frames": nq, "zero_sd_components": int((sd <= 0).sum())}
+    return Cn.astype(np.float32), {"quiet_frames": nq, "zero_sd_components": int((sd <= 0).sum()),
+                                   "quiet_mask_length_minus_T": length_mismatch}
 
 
 def analyze(args) -> int:
