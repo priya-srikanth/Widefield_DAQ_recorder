@@ -192,6 +192,14 @@ QC per run: two montages (`*_components.png` region-ordered + `*_components_byen
 energy-ranked, auto-emitted by `run_locanmf.py` via `wfield_local/montage_by_energy.py`) plus
 the localization metric. Outputs go to a new `locanmf_*` subfolder; nothing prior overwritten.
 
+**Behavioral analysis + position decoder:** see **`LOCANMF_LICK_CUE_ANALYSIS.md`** for the
+lick/cue-evoked analysis decisions and findings (normalization journey → use ΔF/F for
+cross-animal; region-pooled LocaNMF ≡ Allen-ROI r≈0.99 → reserve LocaNMF for per-component /
+model basis; contralateral SSp tuning; orofacial responses are lick(motor)-driven) and the
+**stroke-study plan** (cue-anchored per-position logistic-regression decoder, per-session vs
+frozen-pre-stroke comparison, engagement = movement-gated not lick-gated, DLC/facerhythm +
+cross-day registration prerequisites).
+
 ## Significant local-analysis modules (added during this work)
 
 - `wfield_local/atlas_overlay.py` — shared region-outline helper (the fix above).

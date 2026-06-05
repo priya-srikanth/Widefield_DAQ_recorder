@@ -106,18 +106,25 @@ def main() -> int:
         X, y, feat_reg = _trial_features(s, args)
         names = {int(k): v for k, v in json.load(
             open(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_area_names.json")[0]))}
-        accs = {}; cmn = None
+        accs = {}; recall = {}; cmn = None
         for g, prefs in groups.items():
             cols = (np.arange(X.shape[1]) if prefs is None else
                     np.array([i for i in range(X.shape[1]) if any(names.get(int(feat_reg[i]), "").startswith(p) for p in prefs)]))
             if cols.size == 0:
-                accs[g] = float("nan"); continue
+                accs[g] = float("nan"); recall[g] = [float("nan")] * 6; continue
             clf = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000, C=0.5))
             pred = cross_val_predict(clf, X[:, cols], y, cv=StratifiedKFold(5, shuffle=True, random_state=0))
             accs[g] = accuracy_score(y, pred)
+            cm = confusion_matrix(y, pred, labels=DISPLAY_ORDER); cmg = cm / np.maximum(cm.sum(1, keepdims=True), 1)
+            recall[g] = np.diag(cmg).tolist()      # per-position recall = the pre/post-diffable quantity
             if g == "all":
-                cm = confusion_matrix(y, pred, labels=DISPLAY_ORDER); cmn = cm / cm.sum(1, keepdims=True)
-        summary[s["label"]] = {"n_trials": int(X.shape[0]), "n_feat": int(X.shape[1]), "acc": accs}
+                cmn = cmg
+        # trials per position (for weighting the pre/post comparison)
+        npos = {POSITION_NAMES[c]: int((y == c).sum()) for c in DISPLAY_ORDER}
+        summary[s["label"]] = {"n_trials": int(X.shape[0]), "n_feat": int(X.shape[1]), "acc": accs,
+                               "positions": [POSITION_NAMES[c] for c in DISPLAY_ORDER],
+                               "recall_by_position": recall, "n_per_position": npos,
+                               "source": args.source, "align": args.align}
         print(f"{s['label']}: n={X.shape[0]} {args.source}feat={X.shape[1]} | "
               + "  ".join(f"{g}={a:.2f}" for g, a in accs.items()), flush=True)
         ax = axes[0][si]; im = ax.imshow(cmn, vmin=0, vmax=1, cmap="magma")
@@ -132,8 +139,26 @@ def main() -> int:
     fig.tight_layout()
     tag = f"{args.source}_{args.align}"
     fig.savefig(args.output / f"locanmf_position_decoder_{args.date}_{tag}.png", dpi=130); plt.close(fig)
+
+    # ---- per-position recall (the quantity to diff pre vs post), by feature group ----
+    posnames = [POSITION_NAMES[c] for c in DISPLAY_ORDER]
+    fig2, axes2 = plt.subplots(1, len(sess), figsize=(5 * len(sess), 4), squeeze=False, sharey=True)
+    for si, s in enumerate(sess):
+        ax = axes2[0][si]; rec = summary[s["label"]]["recall_by_position"]; x = np.arange(6); w = 0.27
+        for gi, g in enumerate(["all", "SSp", "MO"]):
+            ax.bar(x + (gi - 1) * w, rec.get(g, [np.nan] * 6), w, label=g)
+        ax.axhline(1 / 6, color="grey", ls="--", lw=0.8, label="chance")
+        ax.set_xticks(x); ax.set_xticklabels(posnames, rotation=45, ha="right", fontsize=7)
+        ax.set_title(s["label"], fontsize=10); ax.set_ylim(0, 1)
+        if si == 0:
+            ax.set_ylabel("decoding recall"); ax.legend(fontsize=7)
+    fig2.suptitle(f"Per-position decoding recall [{tag}] — pre/post comparison quantity, {args.date}", fontsize=12)
+    fig2.tight_layout()
+    fig2.savefig(args.output / f"locanmf_position_recall_{args.date}_{tag}.png", dpi=130); plt.close(fig2)
+
     (args.output / f"locanmf_position_decoder_{args.date}_{tag}_summary.json").write_text(json.dumps(summary, indent=2))
-    print("wrote", args.output / f"locanmf_position_decoder_{args.date}_{tag}.png", flush=True)
+    print("wrote", args.output / f"locanmf_position_decoder_{args.date}_{tag}.png",
+          "+ recall fig + summary", flush=True)
     return 0
 
 
