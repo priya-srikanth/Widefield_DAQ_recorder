@@ -91,7 +91,9 @@ def _trial_features(s, args):
         if codes[k] < 0:
             continue
         c0 = int(cue_f[k])
-        if c0 < 0 or c0 + post_n > T:
+        # cue/precue-referenced window start (precue = the post_n window ending at the cue)
+        ref0 = c0 - post_n if args.align == "precue" else c0
+        if ref0 < 0 or ref0 + post_n > T:
             continue
         if subtract:
             if c0 - pre_n < 0:
@@ -100,12 +102,12 @@ def _trial_features(s, args):
         else:
             base = 0.0
         if first[k] > 0 and 0 < rt[k] <= maxrt_n:           # ENGAGED: cue + lick
-            align = c0 if args.align == "cue" else int(first[k])
-            if align + post_n > T:
+            w0 = int(first[k]) if args.align == "lick" else ref0
+            if w0 < 0 or w0 + post_n > T:
                 continue
-            X.append(sig[:, align:align + post_n].mean(1) - base); y.append(int(codes[k])); g.append(int(blk_id[k]))
-        else:                                               # NO-LICK: cue-aligned only (no lick to align)
-            Xn.append(sig[:, c0:c0 + post_n].mean(1) - base); yn.append(int(codes[k]))
+            X.append(sig[:, w0:w0 + post_n].mean(1) - base); y.append(int(codes[k])); g.append(int(blk_id[k]))
+        else:                                               # NO-LICK: cue/precue-referenced (no lick to align)
+            Xn.append(sig[:, ref0:ref0 + post_n].mean(1) - base); yn.append(int(codes[k]))
     return np.array(X), np.array(y), np.array(g), np.array(Xn), np.array(yn), feat_reg
 
 
@@ -114,7 +116,7 @@ def main() -> int:
     ap.add_argument("--date", default="0603")
     ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--source", choices=("locanmf", "roi"), default="locanmf")
-    ap.add_argument("--align", choices=("cue", "lick"), default="cue")
+    ap.add_argument("--align", choices=("cue", "lick", "precue"), default="cue")
     ap.add_argument("--baseline", choices=("none", "precue"), default="none")
     ap.add_argument("--cv", choices=("block", "random"), default="block")
     ap.add_argument("--fs", type=float, default=31.23)
@@ -141,7 +143,7 @@ def main() -> int:
         X, y, gblk, Xnl, ynl, feat_reg = _trial_features(s, args)
         names = {int(k): v for k, v in json.load(
             open(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_area_names.json")[0]))}
-        nl_ok = args.align == "cue" and Xnl.shape[0] >= 6   # no-lick eval valid only for cue-aligned features
+        nl_ok = args.align in ("cue", "precue") and Xnl.shape[0] >= 6   # no-lick valid for cue/precue (no lick needed)
         accs = {}; recall = {}; acc_nl = {}; recall_nl = {}; cmn = None
         for g, prefs in groups.items():
             cols = (np.arange(X.shape[1]) if prefs is None else
