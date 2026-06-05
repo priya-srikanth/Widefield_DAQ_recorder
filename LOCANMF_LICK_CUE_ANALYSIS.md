@@ -76,6 +76,15 @@ structurally intact, so this is a *functional* reorganization question, not lesi
   engaged trials, 5-fold: **0.59 / 0.69 / 0.79** (chance 0.17) for PS92/PS94/PS95 6/3. **SSp
   carries it (0.51–0.63) >> MO (0.30–0.47).** Confusions are between adjacent spouts. LocaNMF
   features modestly beat SVD-ROI (esp. MO); cue-aligned ≈ lick-aligned.
+- **F11. No-lick trials decode at ≈ chance** (train on engaged, apply to no-lick: 0.16/0.23/0.26
+  LocaNMF, 0.13–0.21 ROI; chance 0.17). (a) A clean **negative control** — the decoder isn't
+  exploiting a confound (else no-lick would still decode). (b) Confirms the position code is
+  **lick/engagement-driven** (F1). (c) IMPORTANT: baseline no-lick = **disengagement** (chose
+  not to engage → no attempt → no code); post-stroke no-lick = **failed attempts** (tried,
+  motor failed) — those are the real test (if they decode *above* this chance baseline, intent
+  is preserved in cortex despite motor failure). **Must separate failed-attempt from disengaged
+  via movement/video.** `locanmf_position_decoder.py` now emits engaged + no-lick recall as a
+  standard output.
 
 ## 4. When is LocaNMF actually helpful (the synthesis)
 - **Not** for region-level evoked responses / ROI summaries → that equals an Allen-ROI average

@@ -72,16 +72,22 @@ def _trial_features(s, args):
     maxrt_n = int(round(args.max_rt * args.fs))
     ls = np.sort(lick_f); j = np.searchsorted(ls, cue_f, side="right")
     first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cue_f
-    X, y = [], []
+    X, y, Xn, yn = [], [], [], []
     for k in range(cue_f.size):
-        if codes[k] < 0 or not (first[k] > 0 and 0 < rt[k] <= maxrt_n):   # engaged: cue + lick
+        if codes[k] < 0:
             continue
-        c0 = int(cue_f[k]); align = c0 if args.align == "cue" else int(first[k])
-        if align + post_n > T or c0 - pre_n < 0:
+        c0 = int(cue_f[k])
+        if c0 - pre_n < 0 or c0 + post_n > T:
             continue
-        feat = sig[:, align:align + post_n].mean(1) - sig[:, c0 - pre_n:c0].mean(1)
-        X.append(feat); y.append(int(codes[k]))
-    return np.array(X), np.array(y), feat_reg
+        base = sig[:, c0 - pre_n:c0].mean(1)
+        if first[k] > 0 and 0 < rt[k] <= maxrt_n:           # ENGAGED: cue + lick
+            align = c0 if args.align == "cue" else int(first[k])
+            if align + post_n > T:
+                continue
+            X.append(sig[:, align:align + post_n].mean(1) - base); y.append(int(codes[k]))
+        else:                                               # NO-LICK: cue-aligned only (no lick to align)
+            Xn.append(sig[:, c0:c0 + post_n].mean(1) - base); yn.append(int(codes[k]))
+    return np.array(X), np.array(y), np.array(Xn), np.array(yn), feat_reg
 
 
 def main() -> int:
@@ -103,30 +109,41 @@ def main() -> int:
     fig, axes = plt.subplots(1, len(sess), figsize=(5 * len(sess), 4.6), squeeze=False)
     summary = {}
     for si, s in enumerate(sess):
-        X, y, feat_reg = _trial_features(s, args)
+        X, y, Xnl, ynl, feat_reg = _trial_features(s, args)
         names = {int(k): v for k, v in json.load(
             open(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_area_names.json")[0]))}
-        accs = {}; recall = {}; cmn = None
+        nl_ok = args.align == "cue" and Xnl.shape[0] >= 6   # no-lick eval valid only for cue-aligned features
+        accs = {}; recall = {}; acc_nl = {}; recall_nl = {}; cmn = None
         for g, prefs in groups.items():
             cols = (np.arange(X.shape[1]) if prefs is None else
                     np.array([i for i in range(X.shape[1]) if any(names.get(int(feat_reg[i]), "").startswith(p) for p in prefs)]))
             if cols.size == 0:
-                accs[g] = float("nan"); recall[g] = [float("nan")] * 6; continue
+                accs[g] = recall[g] = float("nan"); acc_nl[g] = float("nan"); recall_nl[g] = [float("nan")] * 6; continue
             clf = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000, C=0.5))
             pred = cross_val_predict(clf, X[:, cols], y, cv=StratifiedKFold(5, shuffle=True, random_state=0))
             accs[g] = accuracy_score(y, pred)
-            cm = confusion_matrix(y, pred, labels=DISPLAY_ORDER); cmg = cm / np.maximum(cm.sum(1, keepdims=True), 1)
-            recall[g] = np.diag(cmg).tolist()      # per-position recall = the pre/post-diffable quantity
+            cmg = confusion_matrix(y, pred, labels=DISPLAY_ORDER); cmg = cmg / np.maximum(cmg.sum(1, keepdims=True), 1)
+            recall[g] = np.diag(cmg).tolist()      # engaged per-position recall (5-fold, out-of-sample)
             if g == "all":
                 cmn = cmg
-        # trials per position (for weighting the pre/post comparison)
+            if nl_ok:                              # train on engaged, apply to held-aside no-lick trials
+                clf2 = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000, C=0.5)).fit(X[:, cols], y)
+                pnl = clf2.predict(Xnl[:, cols]); acc_nl[g] = accuracy_score(ynl, pnl)
+                cmnl = confusion_matrix(ynl, pnl, labels=DISPLAY_ORDER)
+                recall_nl[g] = (np.diag(cmnl) / np.maximum(cmnl.sum(1), 1)).tolist()
+            else:
+                acc_nl[g] = float("nan"); recall_nl[g] = [float("nan")] * 6
         npos = {POSITION_NAMES[c]: int((y == c).sum()) for c in DISPLAY_ORDER}
         summary[s["label"]] = {"n_trials": int(X.shape[0]), "n_feat": int(X.shape[1]), "acc": accs,
                                "positions": [POSITION_NAMES[c] for c in DISPLAY_ORDER],
                                "recall_by_position": recall, "n_per_position": npos,
+                               "n_nolick": int(Xnl.shape[0]), "acc_nolick": acc_nl,
+                               "recall_nolick_by_position": recall_nl,
                                "source": args.source, "align": args.align}
-        print(f"{s['label']}: n={X.shape[0]} {args.source}feat={X.shape[1]} | "
-              + "  ".join(f"{g}={a:.2f}" for g, a in accs.items()), flush=True)
+        nlstr = (f" | NO-LICK(n={Xnl.shape[0]}) " + "  ".join(f"{g}={a:.2f}" for g, a in acc_nl.items())) if nl_ok \
+            else f" | no-lick n={Xnl.shape[0]} (skipped: needs --align cue)"
+        print(f"{s['label']}: engaged n={X.shape[0]} {args.source}feat={X.shape[1]} | "
+              + "  ".join(f"{g}={a:.2f}" for g, a in accs.items()) + nlstr, flush=True)
         ax = axes[0][si]; im = ax.imshow(cmn, vmin=0, vmax=1, cmap="magma")
         labs = [POSITION_NAMES[c] for c in DISPLAY_ORDER]
         ax.set_xticks(range(6)); ax.set_xticklabels(labs, rotation=45, ha="right", fontsize=7)
@@ -140,19 +157,22 @@ def main() -> int:
     tag = f"{args.source}_{args.align}"
     fig.savefig(args.output / f"locanmf_position_decoder_{args.date}_{tag}.png", dpi=130); plt.close(fig)
 
-    # ---- per-position recall (the quantity to diff pre vs post), by feature group ----
+    # ---- per-position recall: engaged (5-fold) vs no-lick (trained on engaged) ----
     posnames = [POSITION_NAMES[c] for c in DISPLAY_ORDER]
-    fig2, axes2 = plt.subplots(1, len(sess), figsize=(5 * len(sess), 4), squeeze=False, sharey=True)
+    fig2, axes2 = plt.subplots(1, len(sess), figsize=(5 * len(sess), 4.2), squeeze=False, sharey=True)
     for si, s in enumerate(sess):
-        ax = axes2[0][si]; rec = summary[s["label"]]["recall_by_position"]; x = np.arange(6); w = 0.27
-        for gi, g in enumerate(["all", "SSp", "MO"]):
-            ax.bar(x + (gi - 1) * w, rec.get(g, [np.nan] * 6), w, label=g)
+        ax = axes2[0][si]; sm = summary[s["label"]]; x = np.arange(6); w = 0.38
+        ax.bar(x - w / 2, sm["recall_by_position"].get("all", [np.nan] * 6), w, color="tab:blue",
+               label="engaged (5-fold)")
+        ax.bar(x + w / 2, sm["recall_nolick_by_position"].get("all", [np.nan] * 6), w, color="tab:red",
+               label=f"no-lick (n={sm['n_nolick']})")
         ax.axhline(1 / 6, color="grey", ls="--", lw=0.8, label="chance")
-        ax.set_xticks(x); ax.set_xticklabels(posnames, rotation=45, ha="right", fontsize=7)
-        ax.set_title(s["label"], fontsize=10); ax.set_ylim(0, 1)
+        ax.set_xticks(x); ax.set_xticklabels(posnames, rotation=45, ha="right", fontsize=7); ax.set_ylim(0, 1)
+        ax.set_title(f"{s['label']}  eng={sm['acc']['all']:.2f}  no-lick={sm['acc_nolick']['all']:.2f}", fontsize=9)
         if si == 0:
-            ax.set_ylabel("decoding recall"); ax.legend(fontsize=7)
-    fig2.suptitle(f"Per-position decoding recall [{tag}] — pre/post comparison quantity, {args.date}", fontsize=12)
+            ax.set_ylabel("per-position recall"); ax.legend(fontsize=7)
+    fig2.suptitle(f"Per-position recall — engaged vs no-lick [{tag}], {args.date} "
+                  f"(no-lick = baseline disengagement here; post-stroke = failed attempts)", fontsize=11)
     fig2.tight_layout()
     fig2.savefig(args.output / f"locanmf_position_recall_{args.date}_{tag}.png", dpi=130); plt.close(fig2)
 
