@@ -29,6 +29,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.ndimage import gaussian_filter1d
+
+
+def _sm(x, sigma):
+    return gaussian_filter1d(np.asarray(x, float), sigma) if sigma and sigma > 0 else x
 
 POSNAMES = ["close_center", "close_L", "close_R", "far_center", "far_L", "far_R"]
 OROFACIAL = {3: "MOp", 4: "MOs", 5: "SSp-n", 6: "SSp-m"}
@@ -62,6 +67,7 @@ def main() -> int:
                     help="allen_area_names.json for region labels (any session's; default: first found)")
     ap.add_argument("--post-window", type=float, nargs=2, default=(0.0, 0.5),
                     help="post-lick window (s) for the responsiveness peak")
+    ap.add_argument("--smooth-sigma", type=float, default=1.0, help="Gaussian frames for display smoothing")
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -97,10 +103,10 @@ def main() -> int:
         if sel.sum() == 0:
             ax.text(0.5, 0.5, "none", ha="center", va="center", transform=ax.transAxes); continue
         for tr, an in zip(traces[sel], animal[sel]):
-            ax.plot(time, tr, color=ANIMAL_COLOR.get(an, "grey"), alpha=0.5, lw=0.9)
+            ax.plot(time, _sm(tr, args.smooth_sigma), color=ANIMAL_COLOR.get(an, "grey"), alpha=0.5, lw=0.9)
         gm = traces[sel].mean(0); gs = traces[sel].std(0) / np.sqrt(sel.sum())
-        ax.plot(time, gm, color="k", lw=2.2, label="grand mean")
-        ax.fill_between(time, gm - gs, gm + gs, color="k", alpha=0.2)
+        ax.plot(time, _sm(gm, args.smooth_sigma), color="k", lw=2.2, label="grand mean")
+        ax.fill_between(time, _sm(gm - gs, args.smooth_sigma), _sm(gm + gs, args.smooth_sigma), color="k", alpha=0.2)
         ax.axvline(0, color="grey", lw=0.6, ls="--"); ax.axhline(0, color="grey", lw=0.5)
         ax.set_xlabel("time from lick (s)"); ax.set_ylabel("quiet z-score")
     handles = [plt.Line2D([], [], color=c, label=a) for a, c in ANIMAL_COLOR.items()]
