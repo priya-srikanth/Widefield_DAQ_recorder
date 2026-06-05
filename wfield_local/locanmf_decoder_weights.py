@@ -29,8 +29,10 @@ from sklearn.model_selection import GroupKFold, cross_val_predict
 from sklearn.metrics import accuracy_score
 
 from wfield_local.locanmf_cue_lick_analysis import SESSIONS
-from wfield_local.locanmf_position_decoder import _trial_features
-from wfield_local.plot_lick_aligned_averages import POSITION_NAMES, DISPLAY_ORDER
+from wfield_local.locanmf_position_decoder import _trial_features, _build_signal
+from wfield_local.plot_lick_aligned_averages import POSITION_NAMES, DISPLAY_ORDER, _load_daq_events
+from wfield_local.plot_spout_trial_averages import _load_daq_events as _load_cue, _classify_cues
+from wfield_local.locanmf_crossanimal_dff import _frames
 
 FS = 31.23
 POSNAMES = [POSITION_NAMES[c] for c in DISPLAY_ORDER]
@@ -200,6 +202,78 @@ def fig_baseline_variability(out):
     return p, by_animal
 
 
+def fig_top_components(label, out, topn=10):
+    """Spatial footprints (Allen-overlaid) of the top-N LocaNMF components by decoder weight."""
+    s = _sess(label); mc = s["mc"]
+    A = np.load(f"{mc}/locanmf_affine8v1_final/{label}_locanmf_A.npy")          # (H,W,ncomp)
+    ad = glob.glob(f"{mc}/wfield_local_results/allen_aligned_affine8v1")[0]
+    atlas = np.load(f"{ad}/allen_area_atlas_native_grid.npy"); mask = np.load(f"{ad}/allen_brain_mask_native_grid.npy").astype(bool)
+    names = _names(s)
+    X, y, g, _, _, reg = _trial_features(s, _args("lick", 2.0))
+    lr = _clf().fit(X, y).named_steps["logisticregression"]; ci = {int(c): i for i, c in enumerate(lr.classes_)}
+    coef = lr.coef_; importance = np.abs(coef).sum(0); top = np.argsort(importance)[::-1][:topn]
+    b = np.zeros_like(atlas, bool)
+    b[:-1, :] |= atlas[:-1, :] != atlas[1:, :]; b[:, :-1] |= atlas[:, :-1] != atlas[:, 1:]
+    ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+    fig, axes = plt.subplots(2, (topn + 1) // 2, figsize=(1.8 * topn, 8))
+    for ax, comp in zip(axes.ravel(), top):
+        fp = A[:, :, comp].astype(float).copy(); fp[~mask] = np.nan
+        ax.imshow(fp[y0:y1, x0:x1], cmap="magma")
+        bb = np.where(b[y0:y1, x0:x1]); ax.scatter(bb[1], bb[0], s=0.2, c="white", alpha=0.35, marker=".")
+        pos = DISPLAY_ORDER[int(np.argmax([coef[ci[p], comp] if p in ci else -9 for p in DISPLAY_ORDER]))]
+        ax.set_title(f"comp#{comp} {names.get(int(reg[comp]),'?')}\n->{POSITION_NAMES[pos]} |w|={importance[comp]:.2f}", fontsize=9)
+        ax.set_xticks([]); ax.set_yticks([])
+    for ax in axes.ravel()[len(top):]:
+        ax.axis("off")
+    fig.suptitle(f"{label}: top-{topn} LocaNMF components by decoder weight (footprints, Allen-overlaid)", fontsize=13)
+    fig.tight_layout(); p = out / f"locanmf_top_components_{label}.png"; fig.savefig(p, dpi=120); plt.close(fig)
+    return p
+
+
+def _lick_trials(label):
+    s = _sess(label); sig, _ = _build_signal(s, "locanmf"); T = sig.shape[1]
+    cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
+    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    blk = np.zeros(len(codes), int); b = 0
+    for i in range(1, len(codes)):
+        if codes[i] != codes[i - 1]:
+            b += 1
+        blk[i] = b
+    ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right")
+    first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
+    keep = [k for k in range(cf.size) if codes[k] >= 0 and first[k] > 0 and 0 < rt[k] <= 2 * FS]
+    return sig, T, np.array([int(first[k]) for k in keep]), np.array([int(codes[k]) for k in keep]), np.array([int(blk[k]) for k in keep])
+
+
+def fig_temporal_dynamics(labels, out):
+    """(A) sliding-window decoding vs time; (B) multi-bin temporal profile vs single window-mean."""
+    win = int(round(0.5 * FS)); offs = np.arange(int(-1.5 * FS), int(3.0 * FS), int(0.25 * FS))
+    nbin = 8; binlen = int(round(0.25 * FS)); colors = {"PS92": "#1f77b4", "PS94": "#d62728", "PS95": "#2ca02c"}
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5.4)); ax = axes[0]; mb = {}
+    for label in labels:
+        sig, T, fl, y, g = _lick_trials(label)
+        accs = []
+        for o in offs:
+            ok = (fl + o >= 0) & (fl + o + win <= T)
+            accs.append(_bcv_acc(np.array([sig[:, f + o:f + o + win].mean(1) for f in fl[ok]]), y[ok], g[ok]))
+        ax.plot(offs / FS, accs, marker="o", ms=3, color=colors.get(label[:4], "k"), label=label[:4])
+        ok = (fl >= 0) & (fl + nbin * binlen <= T)
+        Xmb = np.array([np.concatenate([sig[:, f + bi * binlen:f + (bi + 1) * binlen].mean(1) for bi in range(nbin)]) for f in fl[ok]])
+        Xmean = np.array([sig[:, f:f + nbin * binlen].mean(1) for f in fl[ok]])
+        mb[label[:4]] = (_bcv_acc(Xmean, y[ok], g[ok]), _bcv_acc(Xmb, y[ok], g[ok]))
+    ax.axvline(0, color="k", lw=1); ax.axvline(-0.16, color="grey", ls=":", lw=1); ax.axhline(1 / 6, color="k", ls="--", lw=0.8)
+    ax.set_xlabel("time from first lick (s)"); ax.set_ylabel("accuracy (0.5s window, block-CV)"); ax.set_ylim(0.1, 0.9)
+    ax.legend(fontsize=9); ax.set_title("Sliding-window decoding: when is position information present?")
+    ax = axes[1]; x = np.arange(len(labels)); w = 0.35
+    ax.bar(x - w / 2, [mb[l[:4]][0] for l in labels], w, label="single 2s mean", color="#888")
+    ax.bar(x + w / 2, [mb[l[:4]][1] for l in labels], w, label="8x0.25s temporal bins", color="#d62728")
+    ax.axhline(1 / 6, color="k", ls="--", lw=0.8); ax.set_xticks(x); ax.set_xticklabels([l[:4] for l in labels])
+    ax.set_ylim(0, 1); ax.set_ylabel("accuracy (block-CV)"); ax.legend(fontsize=9); ax.set_title("Does temporal profile beat the window-mean?")
+    fig.suptitle("Rolling temporal dynamics of spout-position coding (first-lick aligned)", fontsize=12)
+    fig.tight_layout(); p = out / "locanmf_decoder_temporal_dynamics.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
@@ -215,6 +289,9 @@ def main() -> int:
     p, by_animal = fig_baseline_variability(args.output)
     print("wrote", p, flush=True)
     print("baseline variability:", {a: {d: round(v[0], 2) for d, v in dd.items()} for a, dd in by_animal.items()}, flush=True)
+    print("wrote", fig_temporal_dynamics(_avail("0603"), args.output), flush=True)
+    for lab in [s["label"] for s in SESSIONS if s["label"][-4:] in ("0601", "0602", "0603", "0604")]:
+        print("wrote", fig_top_components(lab, args.output), flush=True)
     if args.ppt:
         from wfield_local.locanmf_decoder_ppt import build_ppt
         print("wrote", build_ppt(args.output), flush=True)
