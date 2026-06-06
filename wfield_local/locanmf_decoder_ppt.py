@@ -143,6 +143,13 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "Position decodability ramps through the longer 2-3s ENL (maintained code), peaks ~0.5-0.8s post-cue. "
               "PS93 = new animal. Sliding 0.5s window, block-CV.")
         pic(s, rc, left=Inches(1.4), top=Inches(1.5), width=Inches(10.5))
+    lr = src / "locanmf_decoder_rolling_laterality_0605.png"
+    if lr.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "6/5 rolling decoder: laterality (L/center/R) vs full 6-way",
+              "Collapsing to laterality (3-way, chance 0.33) gives higher ABSOLUTE accuracy but similar/slightly WORSE "
+              "above-chance than 6-way -- the close/far distinction carries real information; collapsing doesn't help.")
+        pic(s, lr, left=Inches(2.0), top=Inches(1.5), width=Inches(9.5))
 
     s = prs.slides.add_slide(BLANK)
     title(s, "6/4 engagement: first-40-min decoding",

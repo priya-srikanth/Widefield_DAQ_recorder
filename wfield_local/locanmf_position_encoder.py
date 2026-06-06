@@ -57,42 +57,62 @@ def encode_spatial(label):
         pred[te] = Ridge(alpha=1.0).fit(P[tr], X[tr]).predict(P[te])
     r2 = 1 - ((X - pred) ** 2).sum(0) / np.maximum(((X - X.mean(0)) ** 2).sum(0), 1e-12)
     B = Ridge(alpha=1.0).fit(P, X).coef_.T                       # (6, ncomp) predicted activity per position
-    return dict(label=label, r2=r2, B=B, reg=reg, pos=pos, cv_r2=float(np.mean(r2)))
+    # noise ceiling per component = between-position var / total var (max R^2 a position-only model can reach)
+    gm = X.mean(0); betw = np.zeros(X.shape[1]); wit = np.zeros(X.shape[1])
+    for p in pos:
+        mm = y == p; mu = X[mm].mean(0); betw += mm.sum() * (mu - gm) ** 2; wit += ((X[mm] - mu) ** 2).sum(0)
+    ceiling = betw / (betw + wit + 1e-12)
+    return dict(label=label, r2=r2, B=B, reg=reg, pos=pos, cv_r2=float(np.mean(r2)), ceiling=ceiling)
+
+
+def _quiet_baseline(s, sig):
+    """Per-component mean over quiet (no-lick/no-move) frames; 0 if no quiet mask."""
+    qf = glob.glob(f"{s['mc']}/quiet_affine8v1/*quiet_frame.npy")
+    if not qf:
+        return np.zeros(sig.shape[0])
+    q = np.load(qf[0]).astype(bool); L = min(q.shape[0], sig.shape[1]); qm = np.zeros(sig.shape[1], bool); qm[:L] = q[:L]
+    return sig[:, qm].mean(1)
 
 
 def fig_predicted_maps(label, out):
-    """Predicted per-position EVOKED map (pre-lick-subtracted delta -> directly comparable to the SVD
-    spout_positions delta maps; the no-baseline absolute version is dominated by common activity)."""
+    """Predicted per-position map relative to the QUIET (rest) baseline, diverging colormap so ΔF/F
+    can go negative (deactivation = blue). Quiet-baseline keeps the anticipatory signal that a pre-cue
+    subtraction would remove, and gives a stable zero for the pre/post-stroke residual."""
     s = _sess(label); e = encode_spatial(label)
-    X, y, _, _, _, _ = _trial_features(s, _args(2.0, "precue"))     # delta features
+    sig, _ = _build_signal(s, "locanmf"); qbase = _quiet_baseline(s, sig)
     A = np.load(f"{s['mc']}/locanmf_affine8v1_final/{label}_locanmf_A.npy")
     mask = np.load(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_brain_mask_native_grid.npy")[0]).astype(bool)
     ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
-    B = np.stack([X[y == p].mean(0) for p in DISPLAY_ORDER])        # 6 x ncomp delta per-position means
-    maps = [(B[p][None, None, :] * A).sum(2) for p in range(6)]
+    maps = [((e["B"][p] - qbase)[None, None, :] * A).sum(2) for p in range(6)]   # predicted activity above rest
     vmax = np.nanpercentile([np.abs(m[mask]) for m in maps], 99)
     fig, axes = plt.subplots(2, 3, figsize=(13, 8))
     for ax, p in zip(axes.ravel(), range(6)):
         m = maps[p].astype(float); m[~mask] = np.nan
-        im = ax.imshow(m[y0:y1, x0:x1], cmap="magma", vmin=0, vmax=vmax)
+        im = ax.imshow(m[y0:y1, x0:x1], cmap="RdBu_r", vmin=-vmax, vmax=vmax)    # diverging: red=above rest, blue=below
         ax.set_title(POSITION_NAMES[DISPLAY_ORDER[p]], fontsize=11); ax.set_xticks([]); ax.set_yticks([]); fig.colorbar(im, ax=ax, shrink=0.7)
-    fig.suptitle(f"{label}: ENCODER expected EVOKED activity per intended position (pre-lick delta; "
-                 f"matches SVD; single-trial CV R^2={e['cv_r2']:.3f})", fontsize=12)
+    fig.suptitle(f"{label}: ENCODER expected activity per intended position (quiet-baseline subtracted; "
+                 f"red=above rest, blue=below; single-trial CV R^2={e['cv_r2']:.3f})", fontsize=12)
     fig.tight_layout(); p = out / f"locanmf_encoder_predicted_maps_{label}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
 
 def fig_encoding_r2(label, out):
+    """Explained variance by region: EXPLAINABLE (noise ceiling = between-position var fraction) vs
+    CAPTURED (CV R^2). Low raw R^2 is mostly a low ceiling (trial noise), not a bad encoder."""
     s = _sess(label); e = encode_spatial(label); names = _names(s)
     regs = np.array([names.get(int(e["reg"][i]), "?") for i in range(len(e["r2"]))])
+    reg_ceil = {r: float(np.mean(e["ceiling"][regs == r])) for r in set(regs)}
     reg_r2 = {r: float(np.mean(e["r2"][regs == r])) for r in set(regs)}
-    top = sorted(reg_r2, key=reg_r2.get, reverse=True)[:16]
-    cols = ["#c0392b" if r.startswith(("SSp", "SSs")) else "#2980b9" if r.startswith("MO") else "#888" for r in top]
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.barh(range(len(top))[::-1], [reg_r2[r] for r in top], color=cols)
-    ax.set_yticks(range(len(top))[::-1]); ax.set_yticklabels(top, fontsize=8); ax.axvline(0, color="k", lw=0.6)
-    ax.set_xlabel("cross-validated encoding R^2 (activity explained by position)")
-    ax.set_title(f"{label}: encoding R^2 by region (red=SSp, blue=MO)")
+    top = sorted(reg_ceil, key=reg_ceil.get, reverse=True)[:16]
+    y = np.arange(len(top))[::-1]
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.barh(y + 0.0, [reg_ceil[r] for r in top], 0.4, color="#bbbbbb", label="explainable (noise ceiling)")
+    cols = ["#c0392b" if r.startswith(("SSp", "SSs")) else "#2980b9" if r.startswith("MO") else "#555" for r in top]
+    ax.barh(y - 0.42, [reg_r2[r] for r in top], 0.4, color=cols, label="captured (CV)")
+    ax.set_yticks(y); ax.set_yticklabels(top, fontsize=8); ax.set_xlabel("explained variance (fraction of single-trial variance)")
+    ax.set_title(f"{label}: encoder explained variance by region — explainable vs captured\n"
+                 f"(captured/explainable ~ how good the encoder is; low absolute = trial noise, not model failure)", fontsize=10)
+    ax.legend(fontsize=8)
     fig.tight_layout(); p = out / f"locanmf_encoder_r2_by_region_{label}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
