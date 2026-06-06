@@ -239,6 +239,22 @@ def fig_ev_ceiling_by_position(labels, out, tag):
     return p
 
 
+def fig_quiet_drift(labels, out, tag):
+    """Time-local quiet (rest) baseline over the session, pooled over components, per session. Shows the
+    slow drift (photobleaching/state) the time-local baseline tracks; small in dF/F, but the right
+    reference for long continuous sessions and the pre/post-stroke residual."""
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for lab in labels:
+        s = _sess(lab); sig, _ = _build_signal(s, "locanmf"); T = sig.shape[1]
+        pooled = _quiet_baseline_local(s, sig).mean(0)
+        ax.plot(np.arange(T) / FS / 60, pooled, label=f"{lab[:4]} ({T / FS / 60:.0f}min)")
+    ax.set_xlabel("session time (min)"); ax.set_ylabel("pooled quiet (rest) baseline (dF/F)")
+    ax.axhline(0, color="k", lw=0.5); ax.legend(fontsize=8)
+    ax.set_title(f"Time-local quiet baseline drift over session ({tag}) — small in dF/F; time-local tracks any residual")
+    fig.tight_layout(); p = out / f"locanmf_encoder_quiet_drift_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
@@ -254,6 +270,12 @@ def main() -> int:
                 print("  wrote", f(lab, args.output).name, flush=True)
         except Exception as ex:
             print(f"{lab}: FAILED {type(ex).__name__}: {str(ex)[:80]}", flush=True)
+    labs = [x["label"] for x in SESSIONS if x["label"].endswith(args.date)]
+    for f in (fig_ev_by_position, fig_ev_ceiling_by_position, fig_quiet_drift):
+        try:
+            print("wrote", f(labs, args.output, args.date).name, flush=True)
+        except Exception as ex:
+            print(f"{f.__name__}: FAILED {type(ex).__name__}: {str(ex)[:80]}", flush=True)
     return 0
 
 

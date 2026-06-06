@@ -204,6 +204,13 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "Left: explainable variance (noise ceiling) per position. Right: captured/ceiling. Center positions have "
               "~0 ceiling (no position-distinct signal) -> their low raw EV is nothing-to-explain, not encoder failure.")
         pic(s, evc, left=Inches(0.3), top=Inches(1.7), width=Inches(12.7))
+    qd = src / "locanmf_encoder_quiet_drift_0605.png"
+    if qd.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "ENCODER baseline: time-local quiet (rest) reference",
+              "Pooled rest baseline over the session. Drift is small in dF/F (+-0.005; PS92 a clear downward trend, PS93 "
+              "jumpy over 123 min). The time-local baseline tracks it -> stable zero for the pre/post-stroke residual.")
+        pic(s, qd, left=Inches(1.6), top=Inches(1.7), width=Inches(10.0))
     for lab in encs:
         for kind, sub in [("predicted_maps", "expected cortical activity per intended position (footprint-reconstructed)"),
                           ("temporal", "expected activity time-course per position (SSp / MO pooled, lick-aligned)"),
