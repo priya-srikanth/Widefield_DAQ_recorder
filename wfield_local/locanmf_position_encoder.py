@@ -65,13 +65,41 @@ def encode_spatial(label):
     return dict(label=label, r2=r2, B=B, reg=reg, pos=pos, cv_r2=float(np.mean(r2)), ceiling=ceiling)
 
 
-def _quiet_baseline(s, sig):
-    """Per-component mean over quiet (no-lick/no-move) frames; 0 if no quiet mask."""
+def _quiet_baseline_local(s, sig, nbins=24):
+    """TIME-LOCAL quiet (rest) baseline per component, (ncomp, T): bin the session into nbins, take the
+    median of quiet (no-lick/no-move) frames per bin, interpolate to every frame -> tracks slow drift
+    (photobleaching / state). Falls back to a session-constant mean if no quiet mask. This is the stable
+    cross-session reference for the pre/post-stroke residual."""
+    T = sig.shape[1]
     qf = glob.glob(f"{s['mc']}/quiet_affine8v1/*quiet_frame.npy")
     if not qf:
-        return np.zeros(sig.shape[0])
-    q = np.load(qf[0]).astype(bool); L = min(q.shape[0], sig.shape[1]); qm = np.zeros(sig.shape[1], bool); qm[:L] = q[:L]
-    return sig[:, qm].mean(1)
+        return np.repeat(sig.mean(1, keepdims=True), T, axis=1)
+    q = np.load(qf[0]).astype(bool); L = min(q.shape[0], T); qm = np.zeros(T, bool); qm[:L] = q[:L]
+    qi = np.where(qm)[0]
+    edges = np.linspace(0, T, nbins + 1); cent = (edges[:-1] + edges[1:]) / 2
+    bm = np.full((sig.shape[0], nbins), np.nan)
+    for b in range(nbins):
+        bq = qi[(qi >= edges[b]) & (qi < edges[b + 1])]
+        if len(bq):
+            bm[:, b] = np.median(sig[:, bq], axis=1)
+    base = np.empty((sig.shape[0], T))
+    for c in range(sig.shape[0]):
+        good = ~np.isnan(bm[c])
+        base[c] = np.interp(np.arange(T), cent[good], bm[c, good]) if good.sum() >= 2 else (np.nanmean(bm[c]) if good.any() else sig[c].mean())
+    return base
+
+
+def _engaged_frames(s, post_s=2.0):
+    """First-lick frame + position for engaged (cue+lick) trials, with the post window length (frames)."""
+    cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
+    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right")
+    first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
+    post_n = int(round(post_s * FS)); fr, y = [], []
+    for k in range(cf.size):
+        if codes[k] >= 0 and first[k] > 0 and 0 < rt[k] <= 2 * FS:
+            fr.append(int(first[k])); y.append(int(codes[k]))
+    return np.array(fr), np.array(y), post_n
 
 
 def fig_predicted_maps(label, out):
@@ -79,18 +107,21 @@ def fig_predicted_maps(label, out):
     can go negative (deactivation = blue). Quiet-baseline keeps the anticipatory signal that a pre-cue
     subtraction would remove, and gives a stable zero for the pre/post-stroke residual."""
     s = _sess(label); e = encode_spatial(label)
-    sig, _ = _build_signal(s, "locanmf"); qbase = _quiet_baseline(s, sig)
+    sig, _ = _build_signal(s, "locanmf"); base = _quiet_baseline_local(s, sig)   # time-local rest baseline (ncomp,T)
+    fr, y, post_n = _engaged_frames(s)
+    feats = np.array([sig[:, f:f + post_n].mean(1) - base[:, f:f + post_n].mean(1) for f in fr])  # activity above LOCAL rest
+    B = np.stack([feats[y == p].mean(0) for p in DISPLAY_ORDER])                  # 6 x ncomp expected activity above rest
     A = np.load(f"{s['mc']}/locanmf_affine8v1_final/{label}_locanmf_A.npy")
     mask = np.load(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_brain_mask_native_grid.npy")[0]).astype(bool)
     ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
-    maps = [((e["B"][p] - qbase)[None, None, :] * A).sum(2) for p in range(6)]   # predicted activity above rest
+    maps = [(B[p][None, None, :] * A).sum(2) for p in range(6)]   # predicted activity above (time-local) rest
     vmax = np.nanpercentile([np.abs(m[mask]) for m in maps], 99)
     fig, axes = plt.subplots(2, 3, figsize=(13, 8))
     for ax, p in zip(axes.ravel(), range(6)):
         m = maps[p].astype(float); m[~mask] = np.nan
         im = ax.imshow(m[y0:y1, x0:x1], cmap="RdBu_r", vmin=-vmax, vmax=vmax)    # diverging: red=above rest, blue=below
         ax.set_title(POSITION_NAMES[DISPLAY_ORDER[p]], fontsize=11); ax.set_xticks([]); ax.set_yticks([]); fig.colorbar(im, ax=ax, shrink=0.7)
-    fig.suptitle(f"{label}: ENCODER expected activity per intended position (quiet-baseline subtracted; "
+    fig.suptitle(f"{label}: ENCODER expected activity per intended position (TIME-LOCAL quiet baseline; "
                  f"red=above rest, blue=below; single-trial CV R^2={e['cv_r2']:.3f})", fontsize=12)
     fig.tight_layout(); p = out / f"locanmf_encoder_predicted_maps_{label}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
