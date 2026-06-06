@@ -1,8 +1,11 @@
 """End-of-day archival + cleanup for a widefield recording day (reusable).
 
 Daily policy this implements:
-  * RAW camera movies          -> M: standby      (cold, immutable originals)
-  * ALL other outputs + DAQ    -> N: MICROSCOPE   (corrected video, SVD, Allen
+  * RAW camera movies            -> M: standby   (cold, immutable originals)
+  * MOTION-CORRECTED video (.bin) -> M: standby  (huge; kept OFF MICROSCOPE to
+    save space, under <date>\\<animal>\\motion_corrected\\). LocaNMF doesn't need
+    it (it uses SVTcorr + the atlas), so this doesn't affect the GPU.
+  * ALL other outputs + DAQ      -> N: MICROSCOPE (SVD: U/SVT/SVTcorr, Allen
     transform, event/lick/quiet maps, motion QC, DAQ h5)
   * Once every copy is size-verified, the copied E: files PLUS the reproducible
     E:-only intermediates (cleanpairs ``*.dat`` and any ``*_concat`` raw) may be
@@ -89,6 +92,10 @@ def discover(cfg, date):
                 else:
                     jobs.append(dict(src=src, dst=os.path.join(cfg["m_raw"], date, rel),
                                      kind="raw", session=session))
+            elif f.startswith("motioncorrect_") and f.endswith(".bin"):
+                animal = session.split("_")[0]   # PS92_20260605_125023 -> PS92
+                jobs.append(dict(src=src, kind="mcbin", session=session,
+                                 dst=os.path.join(cfg["m_raw"], date, animal, "motion_corrected", f)))
             else:
                 jobs.append(dict(src=src, dst=os.path.join(cfg["n_lab"], date, rel),
                                  kind="output", session=session))
@@ -104,17 +111,15 @@ def discover(cfg, date):
 
 
 def _priority(job):
-    """Copy order: LocaNMF inputs first, corrected video, DAQ, other N:, M: raw last."""
-    if job["kind"] == "raw":
-        return 4
+    """Copy order: LocaNMF inputs first, DAQ, other N: outputs, huge M: files last."""
+    if job["kind"] in ("raw", "mcbin"):
+        return 4   # huge cold files -> M: standby, least urgent
     if job["kind"] == "daq":
         return 2
     d = job["dst"].lower()
     if "wfield_local_results" in d or "allen_aligned" in d:
-        return 0
-    if d.endswith(".bin"):
-        return 1
-    return 3
+        return 0   # SVD (SVTcorr) + Allen transform = LocaNMF inputs
+    return 3       # other N: outputs (maps, QC, shifts, summaries, frame_map, ...)
 
 
 def _copy_one(src, dst):

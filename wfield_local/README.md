@@ -571,8 +571,9 @@ This launcher also supports AWS session tokens in the local credentials file.
 Reusable daily off-load of a recording day from the local E: drive:
 
 - **Raw camera movies → M: standby** (cold, immutable originals)
-- **All other outputs + DAQ → N: MICROSCOPE** (corrected video, SVD, Allen
-  transform, cue/lick/quiet maps, motion QC, DAQ h5)
+- **Motion-corrected `.bin` → M: standby** under `<date>\<animal>\motion_corrected\`
+  (huge; kept OFF MICROSCOPE to save space — LocaNMF doesn't need it)
+- **SVD + Allen transform + maps + QC + DAQ → N: MICROSCOPE**
 - Once copies are **size-verified**, the copied E: files plus the reproducible
   E:-only intermediates (cleanpairs `*.dat`, any `*_concat` raw) can be deleted
   from E: to reclaim space.
