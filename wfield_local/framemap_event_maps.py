@@ -130,7 +130,7 @@ def run_cue(args) -> int:
             lim = delta_lim if key == "delta" else activity_lim
             im = ax.imshow(maps[name][key], cmap="RdBu_r", vmin=-lim, vmax=lim)
             _overlay_regions(ax, edges)
-            lab = {"pre": "1 s pre-cue", "post": "1 s post-cue", "delta": "post - pre"}[key]
+            lab = {"pre": f"{args.pre_s:g} s pre-cue", "post": f"{args.post_s:g} s post-cue", "delta": "post - pre"}[key]
             ax.set_title(f"{name} n={counts[name]} | {lab}", fontsize=10)
         fig.colorbar(im, ax=axes[row, :], shrink=0.7, pad=0.01)
     fig.suptitle(f"{args.label} cue averages, hemo-corrected, Allen outlines (frame-map mapping)", fontsize=14)

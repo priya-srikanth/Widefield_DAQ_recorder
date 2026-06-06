@@ -40,6 +40,14 @@ SESSIONS = [
      fr"{D}\20260604\PS94_20260604_151516\motion_corrected", "PS94_0604_affine8v1"),
     ("PS95 - 2026-06-04", "ROI crop; cleanpairs frame-map mapping",
      fr"{D}\20260604\PS95_20260604_165712\motion_corrected", "PS95_0604_affine8v1"),
+    ("PS92 - 2026-06-05", "trial-triggered; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
+     fr"{D}\20260605\PS92_20260605_125023\motion_corrected", "PS92_0605_affine8v1"),
+    ("PS93 - 2026-06-05 (new animal)", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
+     fr"{D}\20260605\PS93_20260605_174659\motion_corrected", "PS93_0605_affine8v1"),
+    ("PS94 - 2026-06-05", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
+     fr"{D}\20260605\PS94_20260605_142009\motion_corrected", "PS94_0605_affine8v1"),
+    ("PS95 - 2026-06-05", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
+     fr"{D}\20260605\PS95_20260605_163102\motion_corrected", "PS95_0605_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
@@ -48,7 +56,7 @@ TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, S
 # per-figure: (title_suffix, subdir, filename_suffix, left, top, width)
 FIGS = [
     (": mean 415/470 nm with Allen outlines", "spout", "_mean_415_470_with_allen_overlay.png", 0.10, 1.95, 13.14),
-    (": cue-aligned spout averages (1 s pre, 1 s post, post-pre delta)", "spout", "_spout_positions_1s_pre_post_delta_shared_scale.png", 4.91, 1.59, 3.51),
+    (": cue-aligned spout averages (pre / post / post-pre delta, shared scale; window per panel labels)", "spout", "_spout_positions_1s_pre_post_delta_shared_scale.png", 4.91, 1.59, 3.51),
     (": cue pairwise delta-position contrasts", "spout", "_pairwise_spout_position_delta_contrasts_allen_overlay.png", 4.01, 1.59, 5.31),
     (": post-lick maps by spout position (150 ms)", "lick", "_lick_aligned_150ms_post_by_spout.png", 2.60, 1.40, 8.20),
     (": post-lick pairwise delta-position contrasts", "lick", "_lick_aligned_pairwise_spout_position_contrasts.png", 4.01, 1.59, 5.31),
@@ -186,6 +194,27 @@ if os.path.exists(pb_png) and pb_title not in present:
             "hemo-correction highpass already removes this slow drift.",
             pb_png, 0.15, 1.7, 12.9)
     pb_added = True
+
+# ---- 4a) 2026-06-05 photobleaching: continuous vs trial-triggered (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+pb0605_dir = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out_0605"
+pb0605_sum = os.path.join(pb0605_dir, "photobleach_0605_continuous_vs_trial.png")
+pb0605_title = "Photobleaching 2026-06-05: continuous vs trial-triggered"
+pb0605_added = []
+if os.path.exists(pb0605_sum) and pb0605_title not in present:
+    content(pb0605_title,
+            "Functional 470 nm drift: trial-triggered (PS92) +0.04%/min vs continuous (PS93/94/95) "
+            "mean -0.02%/min -> continuous only modestly worse (~0.06%/min). Larger 415 isosbestic "
+            "decline (esp. PS93, longest) = violet-LED drift, removed by the 0.1 Hz hemo highpass.",
+            pb0605_sum, 0.15, 1.7, 12.9)
+    pb0605_added.append("summary")
+    for an in ("PS92", "PS93", "PS94", "PS95"):
+        per = os.path.join(pb0605_dir, f"photobleach_{an}_0605.png")
+        pt = f"Photobleaching 2026-06-05: {an} per-channel trend"
+        if os.path.exists(per) and pt not in present:
+            content(pt, "415 isosbestic vs 470 functional ROI-median intensity (binned + linear fit)",
+                    per, 0.6, 1.7, 12.0)
+            pb0605_added.append(an)
 
 # ---- 4b) Quiet-normalized lick activity (lands before QC; QC is moved to end below) ----
 NLAB = r"N:\MICROSCOPE\Priya\Widefield\labcams"

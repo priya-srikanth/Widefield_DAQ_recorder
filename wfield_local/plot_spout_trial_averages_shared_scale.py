@@ -71,6 +71,13 @@ def main() -> int:
     atlas = np.load(args.allen_dir / "allen_area_atlas_native_grid.npy")
     edges = _region_edges(atlas)
     counts = _parse_counts(args.summary) if args.summary else {}
+    pre_s, post_s = 1.0, 1.0
+    if args.summary and Path(args.summary).exists():
+        try:
+            _s = json.loads(Path(args.summary).read_text())
+            pre_s, post_s = float(_s.get("pre_s", 1.0)), float(_s.get("post_s", 1.0))
+        except Exception:
+            pass
     lim = _shared_limit(trial, args.percentile)
 
     fig, axes = plt.subplots(6, 3, figsize=(13, 18), constrained_layout=True)
@@ -86,7 +93,7 @@ def main() -> int:
                 continue
             im = ax.imshow(trial[arr_name], cmap="RdBu_r", vmin=-lim, vmax=lim)
             _overlay_regions(ax, edges)
-            label = {"pre": "1 s pre-cue", "post": "1 s post-cue", "delta": "post - pre"}[key]
+            label = {"pre": f"{pre_s:g} s pre-cue", "post": f"{post_s:g} s post-cue", "delta": "post - pre"}[key]
             n = counts.get(pos, "?")
             ax.set_title(f"{pos} n={n} | {label}", fontsize=10)
 
