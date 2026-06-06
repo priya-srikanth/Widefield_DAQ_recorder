@@ -461,11 +461,24 @@ def main() -> int:
     p, by_animal = fig_baseline_variability(args.output)
     print("wrote", p, flush=True)
     print("baseline variability:", {a: {d: round(v[0], 2) for d, v in dd.items()} for a, dd in by_animal.items()}, flush=True)
-    for d in ("0601", "0602", "0603", "0604"):
+    dates = ("0601", "0602", "0603", "0604", "0605")
+    for d in dates:
         if _avail(d):
             print("wrote", fig_temporal_dynamics(_avail(d), args.output), flush=True)
-    for lab in [s["label"] for s in SESSIONS if s["label"][-4:] in ("0601", "0602", "0603", "0604")]:
+    for lab in [s["label"] for s in SESSIONS if s["label"][-4:] in dates]:
         print("wrote", fig_top_components(lab, args.output), flush=True)
+    # cue-aligned rolling + laterality for the continuous cohort; engagement + alignment checks for 6/4
+    for fn, dd in ((fig_rolling_cue, "0605"), (fig_rolling_laterality, "0605"), (fig_v1_vs_v2_alignment, "0604")):
+        if _avail(dd):
+            try:
+                print("wrote", fn(_avail(dd), args.output, dd).name, flush=True)
+            except Exception as ex:
+                print(f"{fn.__name__} skip: {str(ex)[:60]}", flush=True)
+    if _avail("0604"):
+        try:
+            print("wrote", fig_first40(args.output, "0604", "0603").name, flush=True)
+        except Exception as ex:
+            print(f"fig_first40 skip: {str(ex)[:60]}", flush=True)
     if args.ppt:
         from wfield_local.locanmf_decoder_ppt import build_ppt
         print("wrote", build_ppt(args.output), flush=True)

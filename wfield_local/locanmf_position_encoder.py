@@ -300,7 +300,7 @@ def main() -> int:
         try:
             e = encode_spatial(lab)
             print(f"{lab}: CV encoding R^2 mean={e['cv_r2']:.3f}", flush=True)
-            for f in (fig_predicted_maps, fig_encoding_r2, fig_temporal_encoder):
+            for f in (fig_predicted_maps, fig_encoding_r2, fig_temporal_encoder, fig_encoder_vs_svd):
                 print("  wrote", f(lab, args.output).name, flush=True)
         except Exception as ex:
             print(f"{lab}: FAILED {type(ex).__name__}: {str(ex)[:80]}", flush=True)
