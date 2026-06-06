@@ -183,6 +183,13 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
         title(s, "ENCODER — position -> expected neural activity (reverse of the decoder)",
               "Fit pre-stroke; post-stroke the residual (observed - predicted) per INTENDED position = the lesion's "
               "effect, computable even on no-lick/failed trials. Predicted maps + encoding R^2 + expected dynamics follow.")
+    vs = src / "locanmf_encoder_vs_svd_PS95_0605.png"
+    if vs.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "VALIDATION: encoder (LocaNMF) maps vs SVD pixel maps",
+              "Matched cue-aligned pre-cue-delta. Per-position spatial r = 0.99-1.00 (all sessions) -> LocaNMF reconstruction "
+              "is the same as the SVD pixel data; the encoder's predicted maps are the genuine cortical patterns.")
+        pic(s, vs, left=Inches(0.3), top=Inches(2.2), width=Inches(12.7))
     evp = src / "locanmf_encoder_ev_by_position_0605.png"
     if evp.exists():
         s = prs.slides.add_slide(BLANK)
