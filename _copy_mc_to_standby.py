@@ -1,7 +1,8 @@
 """Copy motion-corrected videos (motioncorrect_*.bin) to M: standby for backup.
 
 For every session on MICROSCOPE (N:) that has a motioncorrect_*.bin, copy it to
-  M:\\Widefield\\labcams_raw_data\\<date>\\<animal>\\motion_corrected\\<binname>
+the mirrored session path on standby:
+  M:\\Widefield\\labcams\\<date>\\<session>\\motion_corrected\\<binname>
 Source auto-selection: if the same bin still exists on E: (faster local read),
 copy from E:; otherwise copy from N:. Idempotent + size-verified (skips a dest
 that already byte-matches). Copy-only; deletes nothing.

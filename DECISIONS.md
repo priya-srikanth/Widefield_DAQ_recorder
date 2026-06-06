@@ -131,15 +131,19 @@ Two institutional file servers (copy-only; **never delete from a server without
 explicit per-action permission**, and **only ever write inside the `Priya\` folder**):
 
 - **M: (standby)** = `\\standby.files.med.harvard.edu\hms\neurobio\sabatini\collaborations\Priya`.
-  **Raw, un-motion-corrected** `.dat` (raw_widefield_data + the 6/1 full-FOV session
-  files) → `M:\Widefield\labcams_raw_data\<date>\<animal>\`. Only the raw camera
-  `.dat`; not camlogs/cleanpairs/motioncorrect/analysis. Copy → verify sizes → confirm
-  → then delete E: originals.
+  Holds the **huge files**, mirroring the session tree at
+  `M:\Widefield\labcams\<date>\<session>\` (folder renamed from `labcams_raw_data`):
+  the **raw** `.dat` in `raw_widefield_data\` AND the **motion-corrected** `.bin` in
+  `motion_corrected\` (the bin lives here, NOT on MICROSCOPE, to save N: space — it
+  was previously on N:). Not camlogs/cleanpairs/analysis on M:. Copy → verify sizes →
+  confirm → then delete E: originals.
 - **N: (MICROSCOPE)** = `\\research.files.med.harvard.edu\Neurobio`, folder
-  `N:\MICROSCOPE\Priya\`. **Analyzed data** (motion-corrected `.bin` videos, SVD,
-  Allen alignment, maps/QC, PPTs) → `N:\MICROSCOPE\Priya\Widefield\labcams\<rel path>\`.
-  Copy excludes the regenerable raw + cleanpairs `*_uint16.dat`. This is also where the
-  GPU machine reads inputs for LocaNMF.
+  `N:\MICROSCOPE\Priya\`. **Analyzed data EXCEPT the corrected video**: SVD
+  (U/SVT/SVTcorr), Allen alignment, maps/QC, DAQ, PPTs →
+  `N:\MICROSCOPE\Priya\Widefield\labcams\<rel path>\`. The motion-corrected `.bin`
+  is NOT kept here (moved to M: standby); LocaNMF only needs SVTcorr + the atlas, so
+  the GPU is unaffected. Copy excludes the regenerable raw + cleanpairs `*_uint16.dat`.
+  `wfield_local/archive_day.py` implements this policy (raw + bin → M:, rest → N:).
 
 See the [[microscope-server-safety]] memory for the hard rules.
 
