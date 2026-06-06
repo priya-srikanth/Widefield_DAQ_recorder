@@ -103,18 +103,21 @@ def _engaged_frames(s, post_s=2.0):
 
 
 def fig_predicted_maps(label, out):
-    """Predicted per-position map relative to the QUIET (rest) baseline, diverging colormap so ΔF/F
-    can go negative (deactivation = blue). Quiet-baseline keeps the anticipatory signal that a pre-cue
-    subtraction would remove, and gives a stable zero for the pre/post-stroke residual."""
+    """Predicted per-position pixel-ΔF/F map = A @ C (the TRUE data reconstruction, not the footprint-
+    scaled s*C which reweights components), relative to the TIME-LOCAL quiet (rest) baseline. Diverging
+    colormap so ΔF/F can go negative (blue=below rest). A@C is the cross-session-comparable frame for the
+    pre/post-stroke residual; footprint scaling is a within-session per-component normalization, not used here."""
     s = _sess(label); e = encode_spatial(label)
-    sig, _ = _build_signal(s, "locanmf"); base = _quiet_baseline_local(s, sig)   # time-local rest baseline (ncomp,T)
+    C = np.load(f"{s['mc']}/locanmf_affine8v1_final/{label}_locanmf_C.npy")       # RAW C (not footprint-scaled)
+    base = _quiet_baseline_local(s, C)                                            # time-local rest baseline on raw C
     fr, y, post_n = _engaged_frames(s)
-    feats = np.array([sig[:, f:f + post_n].mean(1) - base[:, f:f + post_n].mean(1) for f in fr])  # activity above LOCAL rest
-    B = np.stack([feats[y == p].mean(0) for p in DISPLAY_ORDER])                  # 6 x ncomp expected activity above rest
-    A = np.load(f"{s['mc']}/locanmf_affine8v1_final/{label}_locanmf_A.npy")
+    feats = np.array([C[:, f:f + post_n].mean(1) - base[:, f:f + post_n].mean(1) for f in fr])
+    B = np.stack([feats[y == p].mean(0) for p in DISPLAY_ORDER])                  # 6 x ncomp raw-C activity above rest
+    Ar = np.load(f"{s['mc']}/locanmf_affine8v1_final/{label}_locanmf_A.npy"); H, Wd = Ar.shape[:2]
+    Af = np.nan_to_num(Ar.reshape(-1, Ar.shape[2]))
     mask = np.load(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_brain_mask_native_grid.npy")[0]).astype(bool)
     ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
-    maps = [(B[p][None, None, :] * A).sum(2) for p in range(6)]   # predicted activity above (time-local) rest
+    maps = [(Af @ B[p]).reshape(H, Wd) for p in range(6)]   # A@C true pixel-dF/F above (time-local) rest
     vmax = np.nanpercentile([np.abs(m[mask]) for m in maps], 99)
     fig, axes = plt.subplots(2, 3, figsize=(13, 8))
     for ax, p in zip(axes.ravel(), range(6)):
