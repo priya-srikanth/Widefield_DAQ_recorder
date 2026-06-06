@@ -38,8 +38,8 @@ def _sess(label):
     return next(s for s in SESSIONS if s["label"] == label)
 
 
-def _args(post_s=2.0):
-    return SimpleNamespace(source="locanmf", align="lick", baseline="none", pre_s=1.0, post_s=post_s, fs=FS, max_rt=2.0)
+def _args(post_s=2.0, baseline="none"):
+    return SimpleNamespace(source="locanmf", align="lick", baseline=baseline, pre_s=1.0, post_s=post_s, fs=FS, max_rt=2.0)
 
 
 def _names(s):
@@ -61,18 +61,23 @@ def encode_spatial(label):
 
 
 def fig_predicted_maps(label, out):
+    """Predicted per-position EVOKED map (pre-lick-subtracted delta -> directly comparable to the SVD
+    spout_positions delta maps; the no-baseline absolute version is dominated by common activity)."""
     s = _sess(label); e = encode_spatial(label)
+    X, y, _, _, _, _ = _trial_features(s, _args(2.0, "precue"))     # delta features
     A = np.load(f"{s['mc']}/locanmf_affine8v1_final/{label}_locanmf_A.npy")
     mask = np.load(glob.glob(f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_brain_mask_native_grid.npy")[0]).astype(bool)
     ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
-    maps = [(e["B"][p][None, None, :] * A).sum(2) for p in range(6)]
+    B = np.stack([X[y == p].mean(0) for p in DISPLAY_ORDER])        # 6 x ncomp delta per-position means
+    maps = [(B[p][None, None, :] * A).sum(2) for p in range(6)]
     vmax = np.nanpercentile([np.abs(m[mask]) for m in maps], 99)
     fig, axes = plt.subplots(2, 3, figsize=(13, 8))
     for ax, p in zip(axes.ravel(), range(6)):
         m = maps[p].astype(float); m[~mask] = np.nan
         im = ax.imshow(m[y0:y1, x0:x1], cmap="magma", vmin=0, vmax=vmax)
-        ax.set_title(POSITION_NAMES[e["pos"][p]], fontsize=11); ax.set_xticks([]); ax.set_yticks([]); fig.colorbar(im, ax=ax, shrink=0.7)
-    fig.suptitle(f"{label}: ENCODER expected cortical activity per intended position (CV R^2={e['cv_r2']:.3f})", fontsize=12)
+        ax.set_title(POSITION_NAMES[DISPLAY_ORDER[p]], fontsize=11); ax.set_xticks([]); ax.set_yticks([]); fig.colorbar(im, ax=ax, shrink=0.7)
+    fig.suptitle(f"{label}: ENCODER expected EVOKED activity per intended position (pre-lick delta; "
+                 f"matches SVD; single-trial CV R^2={e['cv_r2']:.3f})", fontsize=12)
     fig.tight_layout(); p = out / f"locanmf_encoder_predicted_maps_{label}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
