@@ -11,7 +11,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 
 NAVY = RGBColor(0x1F, 0x33, 0x55); GREY = RGBColor(0x55, 0x55, 0x55); RED = RGBColor(0xB0, 0x22, 0x22)
-DAYS = [("0601", "6/1"), ("0602", "6/2"), ("0603", "6/3"), ("0604", "6/4")]
+DAYS = [("0601", "6/1"), ("0602", "6/2"), ("0603", "6/3"), ("0604", "6/4"), ("0605", "6/5")]
 
 
 def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path:
@@ -120,6 +120,14 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
         title(s, f"Rolling temporal dynamics - {dlab}",
               "When is position info present, and does the temporal profile beat the window-mean?")
         pic(s, fp, left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
+
+    rc = src / "locanmf_decoder_rolling_cue_0605.png"
+    if rc.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "6/5 cue-aligned rolling decoder (pre-cue ENL -> post-cue)",
+              "Position decodability ramps through the longer 2-3s ENL (maintained code), peaks ~0.5-0.8s post-cue. "
+              "PS93 = new animal. Sliding 0.5s window, block-CV.")
+        pic(s, rc, left=Inches(1.4), top=Inches(1.5), width=Inches(10.5))
 
     s = prs.slides.add_slide(BLANK)
     title(s, "6/4 engagement: first-40-min decoding",
