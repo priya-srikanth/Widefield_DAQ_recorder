@@ -106,6 +106,21 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
     s = prs.slides.add_slide(BLANK)
     title(s, "SSp vs MO", "Accuracy by feature set + share of decoder weight by region group.")
     pic(s, src / "locanmf_decoder_region_groups.png", left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
+    for lab in ("PS94_0603", "PS95_0605"):
+        fp = src / f"locanmf_region_ablation_{lab}.png"
+        if fp.exists():
+            s = prs.slides.add_slide(BLANK)
+            title(s, f"Region importance by ABLATION — {lab}",
+                  "region-only = sufficiency; leave-out drop = necessity. SSp leads by sufficiency; low leave-out drops "
+                  "= position info is redundant across cortex (PS94 6/3 SSp-localized; PS95 6/5 fully redundant/global -> movement?).")
+            pic(s, fp, left=Inches(0.3), top=Inches(1.55), width=Inches(12.7))
+    fp = src / "locanmf_ablation_grouped_unilateral.png"
+    if fp.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "Unilateral sensory/motor: leave-one vs leave-two-out",
+              "Leave-TWO exposes necessity hidden by cross-hemisphere redundancy: PS94 6/3 bilateral sensory IS necessary "
+              "(0.044/0.065 one-hemi -> 0.108 both); motor not. PS95 6/5 fully redundant (even all-sensory ~0 -> global/movement).")
+        pic(s, fp, left=Inches(0.4), top=Inches(1.6), width=Inches(12.5))
     s = prs.slides.add_slide(BLANK)
     title(s, "Why a 2 s window", "Decoding vs post-cue window length.")
     pic(s, src / "locanmf_decoder_window_sweep.png", left=Inches(2.9), top=Inches(1.35), height=Inches(5.3))
