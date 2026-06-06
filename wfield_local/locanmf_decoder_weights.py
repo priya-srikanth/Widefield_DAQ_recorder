@@ -297,6 +297,155 @@ def fig_temporal_dynamics(labels, out):
     return p
 
 
+def _blocks(codes):
+    blk = np.zeros(len(codes), int); b = 0
+    for i in range(1, len(codes)):
+        if codes[i] != codes[i - 1]:
+            b += 1
+        blk[i] = b
+    return blk
+
+
+def _engaged(s):
+    """sig, T, first-lick frames, position codes, block ids for engaged (cue+lick) trials."""
+    sig, _ = _build_signal(s, "locanmf"); T = sig.shape[1]
+    cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
+    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    blk = _blocks(codes); ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right")
+    first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
+    keep = [k for k in range(cf.size) if codes[k] >= 0 and first[k] > 0 and 0 < rt[k] <= 2 * FS]
+    return (sig, T, cf, np.array([int(first[k]) for k in keep]), np.array([int(codes[k]) for k in keep]),
+            np.array([int(blk[k]) for k in keep]), np.array([int(cf[k]) for k in keep]))
+
+
+def fig_rolling_cue(labels, out, tag):
+    """Cue-aligned sliding-window decoder spanning pre-cue (ENL) -> post-cue, one line per session."""
+    win = int(round(0.5 * FS)); offs = np.arange(int(-3.5 * FS), int(2.5 * FS), int(0.25 * FS))
+    cols = {"PS92": "#1f77b4", "PS93": "#d62728", "PS94": "#ff7f0e", "PS95": "#2ca02c"}
+    fig, ax = plt.subplots(figsize=(10, 5.6))
+    for lab in labels:
+        sig, T, _, _, y, g, cfk = _engaged(_sess(lab))
+        accs = []
+        for o in offs:
+            ok = (cfk + o >= 0) & (cfk + o + win <= T)
+            accs.append(_bcv_acc(np.array([sig[:, c + o:c + o + win].mean(1) for c in cfk[ok]]), y[ok], g[ok]))
+        ax.plot(offs / FS, accs, marker="o", ms=3, color=cols.get(lab[:4], "k"), label=f"{lab[:4]} (n={len(y)})")
+    ax.axvspan(-3.0, 0, color="grey", alpha=0.08); ax.axvline(0, color="k", lw=1.2); ax.axhline(1 / 6, color="k", ls="--", lw=0.8)
+    ax.set_xlabel("time from cue (s)"); ax.set_ylabel("decoding accuracy (0.5s window, block-CV)"); ax.set_ylim(0.1, 0.85)
+    ax.legend(fontsize=9, loc="upper left"); ax.set_title(f"{tag} cue-aligned rolling decoder: pre-cue (ENL) -> post-cue", fontsize=11)
+    fig.tight_layout(); p = out / f"locanmf_decoder_rolling_cue_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
+def fig_rolling_laterality(labels, out, tag):
+    """Rolling cue-aligned LATERALITY (L/center/R, chance .33, solid) vs full 6-way (dashed)."""
+    win = int(round(0.5 * FS)); offs = np.arange(int(-3.0 * FS), int(2.5 * FS), int(0.25 * FS))
+    cols = {"PS92": "#1f77b4", "PS93": "#d62728", "PS94": "#ff7f0e", "PS95": "#2ca02c"}
+    lat = {c: (0 if POSITION_NAMES[c].endswith("_L") else 2 if POSITION_NAMES[c].endswith("_R") else 1) for c in DISPLAY_ORDER}
+    fig, ax = plt.subplots(figsize=(10, 5.8))
+    for lab in labels:
+        sig, T, _, _, y6, g, cfk = _engaged(_sess(lab)); ylat = np.array([lat[c] for c in y6])
+        al, a6 = [], []
+        for o in offs:
+            ok = (cfk + o >= 0) & (cfk + o + win <= T)
+            X = np.array([sig[:, c + o:c + o + win].mean(1) for c in cfk[ok]])
+            al.append(_bcv_acc(X, ylat[ok], g[ok])); a6.append(_bcv_acc(X, y6[ok], g[ok]))
+        ax.plot(offs / FS, al, marker="o", ms=3, color=cols.get(lab[:4], "k"), label=f"{lab[:4]} laterality")
+        ax.plot(offs / FS, a6, ls="--", lw=1, color=cols.get(lab[:4], "k"), alpha=0.7)
+    ax.axvline(0, color="k", lw=1.2); ax.axhline(1 / 3, color="purple", ls=":", lw=1); ax.axhline(1 / 6, color="k", ls="--", lw=0.8)
+    ax.set_xlabel("time from cue (s)"); ax.set_ylabel("decoding accuracy (0.5s window, block-CV)"); ax.set_ylim(0.1, 0.95)
+    ax.legend(fontsize=8, loc="upper left", ncol=2); ax.set_title(f"{tag} rolling: LATERALITY (3-way, solid) vs 6-way (dashed)", fontsize=11)
+    fig.tight_layout(); p = out / f"locanmf_decoder_rolling_laterality_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
+def fig_first40(out, date="0604", control="0603", minutes=40):
+    """Decoding on the first N min (high-engagement window) vs full session; control date for comparison."""
+    T40 = int(minutes * 60 * FS); post2 = int(round(2 * FS)); AN = ("PS92", "PS94", "PS95")
+    acc = {d: {} for d in (date, control)}; eng = {}
+    for d in (date, control):
+        for an in AN:
+            lab = f"{an}_{d}"
+            try:
+                s = _sess(lab)
+            except StopIteration:
+                continue
+            sig, T, cf, first, y, g, cfk = _engaged(s)
+            Xf, X40 = [], []; yf, y40, gf, g40 = [], [], [], []
+            for i in range(len(first)):
+                fl = first[i]
+                if fl + post2 > T:
+                    continue
+                feat = sig[:, fl:fl + post2].mean(1)
+                Xf.append(feat); yf.append(y[i]); gf.append(g[i])
+                if cfk[i] < T40:
+                    X40.append(feat); y40.append(y[i]); g40.append(g[i])
+            acc[d][an] = (_bcv_acc(np.array(Xf), np.array(yf), np.array(gf)),
+                          _bcv_acc(np.array(X40), np.array(y40), np.array(g40)))
+            if d == date:
+                # engaged fraction early vs late (cue followed by lick within 2s, over all cues)
+                cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
+                cf2, lf2, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+                ls = np.sort(lf2); j = np.searchsorted(ls, cf2, side="right")
+                fst = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = fst - cf2
+                engf = (fst > 0) & (rt > 0) & (rt <= 2 * FS); early = cf2 < T40
+                eng[an] = (engf[early & (codes >= 0)].mean(), engf[(~early) & (codes >= 0)].mean())
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.2)); x = np.arange(len(AN)); w = 0.2
+    ax = axes[0]
+    ax.bar(x - 1.5 * w, [acc[date][a][0] for a in AN], w, label=f"{date} full", color="#c0392b", alpha=0.5)
+    ax.bar(x - 0.5 * w, [acc[date][a][1] for a in AN], w, label=f"{date} first {minutes}min", color="#c0392b")
+    ax.bar(x + 0.5 * w, [acc[control][a][0] for a in AN], w, label=f"{control} full", color="#888", alpha=0.5)
+    ax.bar(x + 1.5 * w, [acc[control][a][1] for a in AN], w, label=f"{control} first {minutes}min", color="#888")
+    ax.axhline(1 / 6, color="k", ls="--", lw=0.8); ax.set_xticks(x); ax.set_xticklabels(AN); ax.set_ylim(0, 1)
+    ax.set_ylabel("decoding accuracy (block-CV)"); ax.legend(fontsize=8); ax.set_title(f"First-{minutes}min decoding: helps {date} (disengaged late), not {control}")
+    ax = axes[1]
+    ax.bar(x - w / 2, [eng[a][0] for a in AN], w, label=f"first {minutes}min", color="#27ae60")
+    ax.bar(x + w / 2, [eng[a][1] for a in AN], w, label=f"after {minutes}min", color="#999")
+    ax.set_xticks(x); ax.set_xticklabels(AN); ax.set_ylim(0, 1); ax.set_ylabel("engaged fraction"); ax.legend(fontsize=9)
+    ax.set_title(f"{date} engagement collapses late in the session")
+    fig.suptitle(f"{date} low decoding is partly late-session disengagement (only partly recovered)", fontsize=12)
+    fig.tight_layout(); p = out / f"locanmf_decoder_first40min_{date}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
+def _roi_sig_v(s, V):
+    mc = s["mc"]; ad = f"{mc}/wfield_local_results/allen_aligned_affine8v{V}"
+    U = np.load(f"{ad}/U_atlas.npy"); SVT = np.load(f"{mc}/wfield_local_results/SVTcorr.npy")
+    atlas = np.load(f"{ad}/allen_area_atlas_native_grid.npy"); mask = np.load(f"{ad}/allen_brain_mask_native_grid.npy").astype(bool)
+    Uf = U.reshape(-1, U.shape[2]); at = atlas.reshape(-1); mk = mask.reshape(-1)
+    rois = [np.nanmean(Uf[(at == l) & mk], 0) @ SVT for l in np.unique(at) if l != 0 and ((at == l) & mk).sum() >= 20]
+    return np.array(rois)
+
+
+def fig_v1_vs_v2_alignment(labels, out, tag):
+    """ROI decoder (alignment-sensitive) v1 vs v2 Allen registration, identical trials (first-lick 2s)."""
+    post2 = int(round(2 * FS)); v1a, v2a = [], []
+    for lab in labels:
+        s = _sess(lab); cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
+        cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+        blk = _blocks(codes); ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right")
+        first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
+        accs = []
+        for V in (1, 2):
+            sig = _roi_sig_v(s, V); T = sig.shape[1]; X, y, g = [], [], []
+            for k in range(cf.size):
+                if codes[k] < 0 or not (first[k] > 0 and 0 < rt[k] <= 2 * FS):
+                    continue
+                fl = int(first[k])
+                if fl + post2 > T:
+                    continue
+                X.append(sig[:, fl:fl + post2].mean(1)); y.append(int(codes[k])); g.append(int(blk[k]))
+            accs.append(_bcv_acc(np.array(X), np.array(y), np.array(g)))
+        v1a.append(accs[0]); v2a.append(accs[1])
+    fig, ax = plt.subplots(figsize=(9, 5)); x = np.arange(len(labels)); w = 0.38
+    ax.bar(x - w / 2, v1a, w, label="ROI v1", color="#888"); ax.bar(x + w / 2, v2a, w, label="ROI v2", color="#2980b9")
+    ax.axhline(1 / 6, color="k", ls="--", lw=0.8); ax.set_xticks(x); ax.set_xticklabels([l[:4] for l in labels])
+    ax.set_ylim(0, 0.8); ax.set_ylabel("decoding accuracy (block-CV)"); ax.legend(fontsize=9)
+    ax.set_title(f"{tag} ROI decoder: v1 vs v2 Allen alignment (first-lick 2s, identical trials)")
+    fig.tight_layout(); p = out / f"locanmf_decoder_v1_vs_v2_alignment_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)

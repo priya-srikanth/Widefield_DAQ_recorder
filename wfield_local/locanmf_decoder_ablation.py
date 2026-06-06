@@ -120,7 +120,7 @@ def fig_grouped_ablation(labels, out, tag):
         ax.set_ylabel("accuracy drop (full - ablated)")
         ax.set_title(f"{label} full={full:.2f}\nleave-ONE (red/blue) vs leave-TWO (purple=bilateral, green=hemi, orange=crossed)", fontsize=9)
     fig.suptitle("Unilateral SENSORY/MOTOR ablation: leave-one vs leave-two-out (necessity hidden by redundancy)", fontsize=12)
-    fig.tight_layout(); p = out / f"locanmf_ablation_grouped_unilateral_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    fig.tight_layout(); p = out / "locanmf_ablation_grouped_unilateral.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
 

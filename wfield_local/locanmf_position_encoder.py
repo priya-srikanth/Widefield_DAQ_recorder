@@ -239,6 +239,40 @@ def fig_ev_ceiling_by_position(labels, out, tag):
     return p
 
 
+def fig_encoder_vs_svd(label, out):
+    """VALIDATION: encoder (LocaNMF reconstruction) vs SVD pixel per-position map, matched cue-aligned
+    pre-cue delta -> the only difference is the LocaNMF basis. Per-position spatial r quantifies fidelity."""
+    s = _sess(label); mc = s["mc"]; W = int(round(FS))
+    ad = glob.glob(f"{mc}/wfield_local_results/allen_aligned_affine8v1")[0]
+    U = np.load(f"{ad}/U_atlas.npy"); SVT = np.load(f"{mc}/wfield_local_results/SVTcorr.npy")
+    mask = np.load(f"{ad}/allen_brain_mask_native_grid.npy").astype(bool); H, Wd = mask.shape; mk = mask.reshape(-1)
+    Uf = U.reshape(-1, U.shape[2])
+    Ar = np.load(f"{mc}/locanmf_affine8v1_final/{label}_locanmf_A.npy"); Af = np.nan_to_num(Ar.reshape(-1, Ar.shape[2]))
+    C = np.load(f"{mc}/locanmf_affine8v1_final/{label}_locanmf_C.npy"); T = SVT.shape[1]
+    cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
+    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    keep = [k for k in range(cf.size) if codes[k] >= 0 and int(cf[k]) - W >= 0 and int(cf[k]) + W <= T]
+    cfk = np.array([int(cf[k]) for k in keep]); yk = np.array([int(codes[k]) for k in keep])
+    dSVT = np.array([SVT[:, c:c + W].mean(1) - SVT[:, c - W:c].mean(1) for c in cfk])
+    dC = np.array([C[:, c:c + W].mean(1) - C[:, c - W:c].mean(1) for c in cfk])
+    ys, xs = np.where(mask); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+    fig, axes = plt.subplots(2, 6, figsize=(20, 7)); rs = []
+    for j, p in enumerate(DISPLAY_ORDER):
+        m = yk == p; svd = Uf @ dSVT[m].mean(0); loc = Af @ dC[m].mean(0)
+        r = np.corrcoef(svd[mk], loc[mk])[0, 1]; rs.append(r); vmax = np.nanpercentile(np.abs(svd[mk]), 99)
+        for row, img, tg in [(0, svd, "SVD pixel"), (1, loc, "LocaNMF recon")]:
+            im = img.reshape(H, Wd).astype(float); im[~mask] = np.nan
+            ax = axes[row][j]; ax.imshow(im[y0:y1, x0:x1], cmap="RdBu_r", vmin=-vmax, vmax=vmax); ax.set_xticks([]); ax.set_yticks([])
+            if row == 0:
+                ax.set_title(f"{POSITION_NAMES[p]}\nr={r:.2f}", fontsize=9)
+            if j == 0:
+                ax.set_ylabel(tg, fontsize=10)
+    fig.suptitle(f"{label}: encoder (LocaNMF recon, bottom) vs SVD pixel (top) per position — cue-aligned pre-cue delta "
+                 f"(median r={np.median(rs):.3f})", fontsize=12)
+    fig.tight_layout(); p = out / f"locanmf_encoder_vs_svd_{label}.png"; fig.savefig(p, dpi=120); plt.close(fig)
+    return p
+
+
 def fig_quiet_drift(labels, out, tag):
     """Time-local quiet (rest) baseline over the session, pooled over components, per session. Shows the
     slow drift (photobleaching/state) the time-local baseline tracks; small in dF/F, but the right
