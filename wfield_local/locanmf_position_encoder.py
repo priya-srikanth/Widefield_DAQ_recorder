@@ -149,6 +149,33 @@ def fig_temporal_encoder(label, out, pre_s=1.0, post_s=1.5):
     return p
 
 
+def fig_ev_by_position(labels, out, tag):
+    """Total (whole-cortex) held-out explained variance per spout position, per session: how much
+    better the encoder predicts each position's trials than the grand mean (R^2 restricted to that
+    position's held-out trials, summed over all components). High = that position is distinctly encoded."""
+    posn = [POSITION_NAMES[c] for c in DISPLAY_ORDER]; pos = np.array(DISPLAY_ORDER)
+    fig, ax = plt.subplots(figsize=(11, 5.5)); x = np.arange(6); w = 0.8 / max(len(labels), 1)
+    summary = {}
+    for i, lab in enumerate(labels):
+        s = _sess(lab)
+        X, y, g, _, _, _ = _trial_features(s, _args(2.0))
+        P = np.stack([(y == p).astype(float) for p in pos], 1)
+        pred = np.zeros_like(X); ng = min(5, int(np.unique(g).size))
+        for tr, te in GroupKFold(ng).split(X, y, g):
+            pred[te] = Ridge(alpha=1.0).fit(P[tr], X[tr]).predict(P[te])
+        xbar = X.mean(0); sstot = ((X - xbar) ** 2).sum(1); ssres = ((X - pred) ** 2).sum(1)
+        ev = [1 - ssres[y == p].sum() / max(sstot[y == p].sum(), 1e-12) for p in pos]
+        ax.bar(x + (i - (len(labels) - 1) / 2) * w, ev, w, label=lab[:4])
+        summary[lab] = {posn[k]: round(float(ev[k]), 3) for k in range(6)}
+    ax.axhline(0, color="k", lw=0.6); ax.set_xticks(x); ax.set_xticklabels(posn, rotation=45, ha="right")
+    ax.set_ylabel("explained variance (held-out R^2, per position)"); ax.legend(fontsize=9, title="session")
+    ax.set_title(f"Encoder: total explained variance per spout position, per session ({tag})")
+    fig.tight_layout(); p = out / f"locanmf_encoder_ev_by_position_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    for lab, d in summary.items():
+        print(f"  {lab}: {d}")
+    return p
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
