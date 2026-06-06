@@ -169,6 +169,24 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
                   "Ranked by per-component block-CV accuracy (NOT |weight|, which surfaces suppressors). Allen-overlaid footprints.")
             pic(s, fp, left=Inches(0.3), top=Inches(1.6), width=Inches(12.7))
 
+    # ENCODER section (reverse model: position -> expected activity)
+    encs = [f"{an}_0605" for an in ("PS92", "PS93", "PS94", "PS95")]
+    if any((src / f"locanmf_encoder_predicted_maps_{l}.png").exists() for l in encs):
+        s = prs.slides.add_slide(BLANK)
+        title(s, "ENCODER — position -> expected neural activity (reverse of the decoder)",
+              "Fit pre-stroke; post-stroke the residual (observed - predicted) per INTENDED position = the lesion's "
+              "effect, computable even on no-lick/failed trials. Predicted maps + encoding R^2 + expected dynamics follow.")
+    for lab in encs:
+        for kind, sub in [("predicted_maps", "expected cortical activity per intended position (footprint-reconstructed)"),
+                          ("temporal", "expected activity time-course per position (SSp / MO pooled, lick-aligned)"),
+                          ("r2_by_region", "cross-validated encoding R^2 by region (activity explained by position)")]:
+            fp = src / f"locanmf_encoder_{kind}_{lab}.png"
+            if fp.exists():
+                s = prs.slides.add_slide(BLANK)
+                title(s, f"ENCODER {lab} — {kind.replace('_', ' ')}", sub)
+                w = Inches(12.5) if kind != "r2_by_region" else Inches(7.5)
+                pic(s, fp, left=(prs.slide_width - w) / 2, top=Inches(1.55), width=w)
+
     # takeaways
     s = prs.slides.add_slide(BLANK); title(s, "Takeaways")
     tf = s.shapes.add_textbox(Inches(0.6), Inches(1.3), Inches(12.0), Inches(5.6)).text_frame; tf.word_wrap = True
