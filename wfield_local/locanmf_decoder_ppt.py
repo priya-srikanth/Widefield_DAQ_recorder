@@ -190,6 +190,13 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "Held-out R^2 restricted to each position's trials. Lateral/extreme positions are most distinctly encoded; "
               "center positions sit near the grand mean (low/negative). PS94 weak throughout.")
         pic(s, evp, left=Inches(0.8), top=Inches(1.7), width=Inches(11.5))
+    evc = src / "locanmf_encoder_ev_ceiling_by_position_0605.png"
+    if evc.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "ENCODER — explained variance per position RELATIVE TO CEILING",
+              "Left: explainable variance (noise ceiling) per position. Right: captured/ceiling. Center positions have "
+              "~0 ceiling (no position-distinct signal) -> their low raw EV is nothing-to-explain, not encoder failure.")
+        pic(s, evc, left=Inches(0.3), top=Inches(1.7), width=Inches(12.7))
     for lab in encs:
         for kind, sub in [("predicted_maps", "expected cortical activity per intended position (footprint-reconstructed)"),
                           ("temporal", "expected activity time-course per position (SSp / MO pooled, lick-aligned)"),

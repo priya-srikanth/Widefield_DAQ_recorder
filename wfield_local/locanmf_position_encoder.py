@@ -176,6 +176,38 @@ def fig_ev_by_position(labels, out, tag):
     return p
 
 
+def fig_ev_ceiling_by_position(labels, out, tag):
+    """Unified per-position (whole-cortex) explained variance RELATIVE TO CEILING. Left: noise ceiling
+    (explainable var) per position; right: captured/ceiling (1 = encoder captures all explainable).
+    Center positions often have ~0 ceiling (activity ~ grand mean) -> low raw EV is no signal, not failure."""
+    posn = [POSITION_NAMES[c] for c in DISPLAY_ORDER]; pos = np.array(DISPLAY_ORDER)
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5.5)); w = 0.8 / max(len(labels), 1)
+    for i, lab in enumerate(labels):
+        s = _sess(lab)
+        X, y, g, _, _, _ = _trial_features(s, _args(2.0))
+        P = np.stack([(y == p).astype(float) for p in pos], 1)
+        pred = np.zeros_like(X); ng = min(5, int(np.unique(g).size))
+        for tr, te in GroupKFold(ng).split(X, y, g):
+            pred[te] = Ridge(alpha=1.0).fit(P[tr], X[tr]).predict(P[te])
+        xbar = X.mean(0); ceil = []; cap = []
+        for p in pos:
+            m = y == p; mu = X[m].mean(0)
+            betw = m.sum() * ((mu - xbar) ** 2).sum(); tot = betw + ((X[m] - mu) ** 2).sum()
+            ceil.append(betw / max(tot, 1e-12)); cap.append(1 - ((X[m] - pred[m]) ** 2).sum() / max(tot, 1e-12))
+        ceil = np.array(ceil); ratio = np.where(ceil > 0.05, np.array(cap) / ceil, np.nan)
+        x = np.arange(6) + (i - (len(labels) - 1) / 2) * w
+        axes[0].bar(x, ceil, w, label=lab[:4]); axes[1].bar(x, ratio, w, label=lab[:4])
+    for ax, t in [(axes[0], "noise ceiling (explainable var) per position"),
+                  (axes[1], "captured / ceiling per position (1 = all explainable captured)")]:
+        ax.set_xticks(range(6)); ax.set_xticklabels(posn, rotation=45, ha="right", fontsize=8)
+        ax.set_title(t, fontsize=10); ax.legend(fontsize=8); ax.axhline(0, color="k", lw=0.5)
+    axes[1].axhline(1, color="grey", ls="--", lw=0.8)
+    fig.suptitle(f"Encoder explained variance per spout position: ceiling vs ceiling-normalized ({tag}; "
+                 f"ratio shown where ceiling>0.05)", fontsize=12)
+    fig.tight_layout(); p = out / f"locanmf_encoder_ev_ceiling_by_position_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
