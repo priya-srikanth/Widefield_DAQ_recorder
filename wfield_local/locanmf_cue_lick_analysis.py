@@ -41,7 +41,7 @@ from wfield_local.locanmf_lick_aligned import (
 )
 
 OROFACIAL = {3: "MOp", 4: "MOs", 5: "SSp-n", 6: "SSp-m"}
-ANIMAL_COLOR = {"PS92": "tab:blue", "PS94": "tab:orange", "PS95": "tab:green"}
+ANIMAL_COLOR = {"PS92": "tab:blue", "PS94": "tab:orange", "PS95": "tab:green", "PS93": "tab:red"}
 L = "M:/MICROSCOPE/Priya/Widefield/labcams"
 D = "M:/MICROSCOPE/Priya/Widefield/DAQ_recorder_output"
 SESSIONS = [
@@ -66,6 +66,18 @@ SESSIONS = [
          h5=f"{D}/20250604/PS94_20260604_152103.h5", regime="A", fmdir=None),
     dict(label="PS95_0604", mc=f"{L}/20260604/PS95_20260604_165712/motion_corrected",
          h5=f"{D}/20250604/PS95_20260604_170729.h5", regime="A", fmdir=None),
+    # 6/5. PS92 trial-triggered; PS93 (NEW animal), PS94, PS95 CONTINUOUS imaging (longer 2-3s ENL).
+    # Same DAQ-recorder h5 format as prior days. All have a cleanpairs frame_map in motion_corrected/
+    # -> regime B (frame_map), NOT pco//2. (Production SVD maps used the frame_map; regime A mis-indexed
+    # frames -> degraded decoding, worst on the longest/continuous sessions. fmdir=None: found in mc.)
+    dict(label="PS92_0605", mc=f"{L}/20260605/PS92_20260605_125023/motion_corrected",
+         h5=f"{D}/20260605/PS92_20260605_125301.h5", regime="B", fmdir=None),
+    dict(label="PS93_0605", mc=f"{L}/20260605/PS93_20260605_174659/motion_corrected",
+         h5=f"{D}/20260605/PS93_20260605_175452.h5", regime="B", fmdir=None),
+    dict(label="PS94_0605", mc=f"{L}/20260605/PS94_20260605_142009/motion_corrected",
+         h5=f"{D}/20260605/PS94_20260605_142249.h5", regime="B", fmdir=None),
+    dict(label="PS95_0605", mc=f"{L}/20260605/PS95_20260605_163102/motion_corrected",
+         h5=f"{D}/20260605/PS95_20260605_163405.h5", regime="B", fmdir=None),
 ]
 
 
