@@ -18,7 +18,7 @@ import sys
 BUF = 64 * 1024 * 1024
 N_ROOT = r"N:\MICROSCOPE\Priya\Widefield\labcams"
 E_ROOT = r"E:\labcams_data"
-M_ROOT = r"M:\Widefield\labcams_raw_data"
+M_ROOT = r"M:\Widefield\labcams"
 
 
 def _sz(p):
@@ -44,7 +44,7 @@ def discover(dates):
                     animal = m.group(1) if m else "UNKNOWN"
                     ecand = npath.replace(N_ROOT, E_ROOT)
                     src = ecand if os.path.exists(ecand) else npath
-                    dst = os.path.join(M_ROOT, date, animal, "motion_corrected", f)
+                    dst = npath.replace(N_ROOT, M_ROOT)  # mirror session path into M: labcams
                     jobs.append(dict(date=date, animal=animal, src=src,
                                      from_="E" if src == ecand else "N", dst=dst))
     return jobs

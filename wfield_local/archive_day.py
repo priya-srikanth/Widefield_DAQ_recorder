@@ -54,7 +54,7 @@ BUF = 64 * 1024 * 1024
 DEFAULTS = dict(
     e_lab=r"E:\labcams_data",
     e_daq=r"E:\DAQ_recorder_output",
-    m_raw=r"M:\Widefield\labcams_raw_data",
+    m_raw=r"M:\Widefield\labcams",
     n_lab=r"N:\MICROSCOPE\Priya\Widefield\labcams",
     n_daq=r"N:\MICROSCOPE\Priya\Widefield\DAQ_recorder_output",
 )
@@ -93,9 +93,9 @@ def discover(cfg, date):
                     jobs.append(dict(src=src, dst=os.path.join(cfg["m_raw"], date, rel),
                                      kind="raw", session=session))
             elif f.startswith("motioncorrect_") and f.endswith(".bin"):
-                animal = session.split("_")[0]   # PS92_20260605_125023 -> PS92
+                # mirror into the session folder alongside raw_widefield_data on M:
                 jobs.append(dict(src=src, kind="mcbin", session=session,
-                                 dst=os.path.join(cfg["m_raw"], date, animal, "motion_corrected", f)))
+                                 dst=os.path.join(cfg["m_raw"], date, rel)))
             else:
                 jobs.append(dict(src=src, dst=os.path.join(cfg["n_lab"], date, rel),
                                  kind="output", session=session))
