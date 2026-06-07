@@ -145,6 +145,18 @@ explicit per-action permission**, and **only ever write inside the `Priya\` fold
   the GPU is unaffected. Copy excludes the regenerable raw + cleanpairs `*_uint16.dat`.
   `wfield_local/archive_day.py` implements this policy (raw + bin → M:, rest → N:).
 
+## Motion-correction sign bug (wfield 0.4.2)
+
+wfield's 2D motion correction (`registration_upsample`) applied the phase-correlation
+offset with the WRONG sign (`+` instead of `-`), **doubling** drift instead of
+removing it. Invisible on sub-pixel sessions; catastrophic on large drift (PS93
+2026-06-06, ~8.5 px → ~17 px residual, blurry corrected mean). Fixed in
+`wfield_local/motion_correct_fixed.py` (sign-corrected drop-in; vendored because
+`runpar` uses multiprocessing); `run_wfield_motion` now imports `motion_correct`
+from there. **PS93 6/6 and PS94 6/5 were re-processed with the fix; all other
+sessions used the buggy-but-negligible (<1.1 px median) correction.** Full record +
+per-session triage in `MOTION_CORRECTION_SIGN_BUG.md`.
+
 See the [[microscope-server-safety]] memory for the hard rules.
 
 ## LocaNMF (run on the GPU machine)

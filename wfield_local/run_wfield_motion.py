@@ -14,7 +14,9 @@ from pathlib import Path
 import numpy as np
 
 from wfield.io import mmap_dat
-from wfield.registration import motion_correct
+# Sign-corrected motion correction (wfield 0.4.2 registration_upsample doubles drift
+# due to a phase-correlation sign error). See wfield_local/motion_correct_fixed.py.
+from wfield_local.motion_correct_fixed import motion_correct
 
 
 def _run_relabel_subprocess(dat: Path, daq_h5: Path, output: Path, mode: str, led_threshold) -> Path:
