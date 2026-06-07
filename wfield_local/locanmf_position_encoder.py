@@ -132,23 +132,40 @@ def fig_predicted_maps(label, out):
     return p
 
 
-def fig_encoding_r2(label, out):
-    """Explained variance by region: EXPLAINABLE (noise ceiling = between-position var fraction) vs
-    CAPTURED (CV R^2). Low raw R^2 is mostly a low ceiling (trial noise), not a bad encoder."""
-    s = _sess(label); e = encode_spatial(label); names = _names(s)
-    regs = np.array([names.get(int(e["reg"][i]), "?") for i in range(len(e["r2"]))])
-    reg_ceil = {r: float(np.mean(e["ceiling"][regs == r])) for r in set(regs)}
-    reg_r2 = {r: float(np.mean(e["r2"][regs == r])) for r in set(regs)}
-    top = sorted(reg_ceil, key=reg_ceil.get, reverse=True)[:16]
-    y = np.arange(len(top))[::-1]
-    fig, ax = plt.subplots(figsize=(9, 6))
-    ax.barh(y + 0.0, [reg_ceil[r] for r in top], 0.4, color="#bbbbbb", label="explainable (noise ceiling)")
-    cols = ["#c0392b" if r.startswith(("SSp", "SSs")) else "#2980b9" if r.startswith("MO") else "#555" for r in top]
-    ax.barh(y - 0.42, [reg_r2[r] for r in top], 0.4, color=cols, label="captured (CV)")
-    ax.set_yticks(y); ax.set_yticklabels(top, fontsize=8); ax.set_xlabel("explained variance (fraction of single-trial variance)")
-    ax.set_title(f"{label}: encoder explained variance by region — explainable vs captured\n"
-                 f"(captured/explainable ~ how good the encoder is; low absolute = trial noise, not model failure)", fontsize=10)
-    ax.legend(fontsize=8)
+def fig_encoding_r2(label, out, topn=16):
+    """Explained variance by region, two views (region-level via summed SS over each region's components,
+    consistent with the FEVE heatmaps):
+      LEFT  absolute — EXPLAINABLE (noise ceiling = between-position SS / single-trial SS) vs CAPTURED
+            (encoder CV SS / single-trial SS); both are fractions of single-trial variance.
+      RIGHT normalized-to-1.0 — FEVE = captured / EXPLAINABLE per region (what fraction of the explainable
+            variance the encoder actually explains; 1.0 = all of it). This removes the ceiling height so
+            you see encoder QUALITY per region; low absolute capture is mostly a low ceiling, not failure."""
+    fe = _region_feve(label)
+    regs = sorted(fe, key=lambda r: fe[r]["expl"] / max(fe[r]["tot"], 1e-12), reverse=True)[:topn]
+    expl = np.array([fe[r]["expl"] / max(fe[r]["tot"], 1e-12) for r in regs])
+    cap = np.array([fe[r]["cap"] / max(fe[r]["tot"], 1e-12) for r in regs])
+    feve = np.array([fe[r]["cap"] / fe[r]["expl"] if fe[r]["expl"] > 0 else np.nan for r in regs])
+    cols = ["#c0392b" if r.startswith(("SSp", "SSs")) else "#2980b9" if r.startswith("MO") else "#555" for r in regs]
+    y = np.arange(len(regs))[::-1]
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    ax = axes[0]
+    ax.barh(y + 0.0, expl, 0.4, color="#bbbbbb", label="explainable (noise ceiling)")
+    ax.barh(y - 0.42, cap, 0.4, color=cols, label="captured (CV)")
+    ax.set_yticks(y); ax.set_yticklabels(regs, fontsize=8); ax.set_xlabel("fraction of single-trial variance")
+    ax.set_title("absolute: explainable vs captured"); ax.legend(fontsize=8)
+    ax = axes[1]
+    ax.barh(y, feve, 0.55, color=cols)
+    ax.axvline(1.0, color="k", ls="--", lw=1.0)
+    lo = min(0.0, np.nanmin(feve) - 0.05) if np.isfinite(feve).any() else 0.0
+    hi = max(1.15, (np.nanmax(feve) + 0.08) if np.isfinite(feve).any() else 1.15)
+    ax.set_xlim(lo, hi); ax.set_yticks(y); ax.set_yticklabels([])
+    ax.set_xlabel("FEVE = captured / explainable  (1.0 dashed = all explainable variance explained)")
+    ax.set_title("normalized to explainable (per region)")
+    for yi, v in zip(y, feve):
+        if np.isfinite(v):
+            ax.text(min(v, hi) + 0.012, yi, f"{v:.2f}", va="center", fontsize=7)
+    fig.suptitle(f"{label}: encoder explained variance by region — absolute vs ceiling-normalized to 1.0 "
+                 f"(SSp/SSs red, MO blue; sorted by explainable variance)", fontsize=11)
     fig.tight_layout(); p = out / f"locanmf_encoder_r2_by_region_{label}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
