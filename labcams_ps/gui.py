@@ -663,6 +663,18 @@ def _patch_gui_docks() -> None:
         snapshot_button.clicked.connect(take_snapshot)
         snap_browse.clicked.connect(choose_snap_folder)
 
+        # Route the upstream recording-panel Snapshot button to the same
+        # separate-folder handler, so NO snapshot path ever creates a
+        # raw_widefield_data/snapshots subfolder under the acquisition folder.
+        try:
+            self.recController.snapshotButton.clicked.disconnect()
+        except Exception:
+            pass
+        try:
+            self.recController.snapshotButton.clicked.connect(take_snapshot)
+        except Exception as err:
+            _display("[labcams_ps] could not rewire recController snapshot button: {0}".format(err))
+
         dock.setWidget(widget)
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
