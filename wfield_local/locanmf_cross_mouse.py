@@ -112,14 +112,33 @@ def fig_cross_mouse(out):
     def agg(mouse, key):
         return np.nanmean([r[key] for r in M[mouse]], axis=0)
 
+    def _ps(mouse, fn):
+        """Per-session scalar values (finite only) for a mouse."""
+        v = np.array([fn(r) for r in M[mouse]], float)
+        return v[np.isfinite(v)]
+
+    def barpts(ax, xs, fn, color, label):
+        """Bar = mean across that mouse's sessions, error bar = SEM, + individual session points
+        (deterministic jitter, alpha for transparency). xs = per-mouse x positions (aligned with `mice`)."""
+        means, sems = [], []
+        for xi, m in zip(xs, mice):
+            v = _ps(m, fn)
+            means.append(v.mean() if v.size else np.nan)
+            sems.append(v.std(ddof=1) / np.sqrt(v.size) if v.size > 1 else 0.0)
+            if v.size:
+                off = np.linspace(-0.11, 0.11, v.size) if v.size > 1 else np.array([0.0])
+                ax.scatter(xi + off, v, s=13, color=color, edgecolor="white", linewidth=0.4, alpha=0.5, zorder=4)
+        ax.bar(xs, means, 0.4, yerr=sems, capsize=3, color=color, label=label, alpha=0.85,
+               error_kw=dict(lw=1.0, ecolor="#222", zorder=3))
+
     fig = plt.figure(figsize=(17, 10)); x = np.arange(len(mice))
-    # (A) overall + laterality means
+    # (A) overall + laterality: mean +- SEM across sessions + session points
     ax = fig.add_subplot(2, 3, 1)
-    ax.bar(x - 0.2, [agg(m, "acc") for m in mice], 0.4, label="6-way", color="#34495e")
-    ax.bar(x + 0.2, [np.nanmean(agg(m, "lat_recall")) for m in mice], 0.4, label="laterality (3-way)", color="#16a085")
+    barpts(ax, x - 0.2, lambda r: r["acc"], "#34495e", "6-way")
+    barpts(ax, x + 0.2, lambda r: np.nanmean(r["lat_recall"]), "#16a085", "laterality (3-way)")
     ax.axhline(1 / 6, color="grey", ls="--", lw=0.8); ax.axhline(1 / 3, color="purple", ls=":", lw=0.8)
     ax.set_xticks(x); ax.set_xticklabels(mice); ax.set_ylim(0, 1); ax.set_ylabel("decoding accuracy"); ax.legend(fontsize=8)
-    ax.set_title("Overall decoding per mouse (all sessions)")
+    ax.set_title("Overall decoding per mouse (mean +- SEM, points = sessions)")
     # (B) per-position recall heatmap
     ax = fig.add_subplot(2, 3, 2)
     R = np.array([agg(m, "recall") for m in mice])
@@ -128,16 +147,17 @@ def fig_cross_mouse(out):
     ax.set_title("Per-position recall (mouse x position)"); fig.colorbar(im, ax=ax, shrink=0.8)
     # (C) LEFT vs RIGHT spout decodability -- movement-side asymmetry
     ax = fig.add_subplot(2, 3, 3)
-    ax.bar(x - 0.2, [agg(m, "Lrecall") for m in mice], 0.4, label="LEFT spouts", color="#2980b9")
-    ax.bar(x + 0.2, [agg(m, "Rrecall") for m in mice], 0.4, label="RIGHT spouts", color="#c0392b")
+    barpts(ax, x - 0.2, lambda r: r["Lrecall"], "#2980b9", "LEFT spouts")
+    barpts(ax, x + 0.2, lambda r: r["Rrecall"], "#c0392b", "RIGHT spouts")
     ax.set_xticks(x); ax.set_xticklabels(mice); ax.set_ylim(0, 1); ax.set_ylabel("mean per-position recall"); ax.legend(fontsize=8)
-    ax.set_title("Left vs Right spout decodability (movement-side)")
+    ax.set_title("Left vs Right spout decodability (mean +- SEM, points = sessions)")
     # (D) cortical hemisphere: SSp-left-only vs SSp-right-only
     ax = fig.add_subplot(2, 3, 4)
-    ax.bar(x - 0.2, [agg(m, "ssp_left") for m in mice], 0.4, label="SSp-LEFT only", color="#8e44ad")
-    ax.bar(x + 0.2, [agg(m, "ssp_right") for m in mice], 0.4, label="SSp-RIGHT only", color="#e67e22")
+    barpts(ax, x - 0.2, lambda r: r["ssp_left"], "#8e44ad", "SSp-LEFT only")
+    barpts(ax, x + 0.2, lambda r: r["ssp_right"], "#e67e22", "SSp-RIGHT only")
     ax.axhline(1 / 6, color="grey", ls="--", lw=0.8); ax.set_xticks(x); ax.set_xticklabels(mice); ax.set_ylim(0, 1)
-    ax.set_ylabel("region-only decoding accuracy"); ax.legend(fontsize=8); ax.set_title("Cortical hemisphere: SSp-left vs SSp-right")
+    ax.set_ylabel("region-only decoding accuracy"); ax.legend(fontsize=8)
+    ax.set_title("Cortical hemisphere: SSp-left vs SSp-right (mean +- SEM, points = sessions)")
     # (E) encoding EV per position heatmap
     ax = fig.add_subplot(2, 3, 5)
     E = np.array([agg(m, "ev") for m in mice]); vmax = np.nanpercentile(np.abs(E), 98)
@@ -146,12 +166,10 @@ def fig_cross_mouse(out):
     ax.set_title("Encoding explained variance per position"); fig.colorbar(im, ax=ax, shrink=0.8)
     # (F) L/R asymmetry index summary
     ax = fig.add_subplot(2, 3, 6)
-    spout_asym = [agg(m, "Lrecall") - agg(m, "Rrecall") for m in mice]
-    hemi_asym = [agg(m, "ssp_left") - agg(m, "ssp_right") for m in mice]
-    ax.bar(x - 0.2, spout_asym, 0.4, label="L-spout minus R-spout recall", color="#c0392b")
-    ax.bar(x + 0.2, hemi_asym, 0.4, label="SSp-left minus SSp-right acc", color="#8e44ad")
+    barpts(ax, x - 0.2, lambda r: r["Lrecall"] - r["Rrecall"], "#c0392b", "L-spout minus R-spout recall")
+    barpts(ax, x + 0.2, lambda r: r["ssp_left"] - r["ssp_right"], "#8e44ad", "SSp-left minus SSp-right acc")
     ax.axhline(0, color="k", lw=0.6); ax.set_xticks(x); ax.set_xticklabels(mice); ax.set_ylabel("asymmetry (L - R)")
-    ax.legend(fontsize=7); ax.set_title("L/R asymmetry indices (PS93 = right orofacial deficit)")
+    ax.legend(fontsize=7); ax.set_title("L/R asymmetry indices, mean +- SEM + sessions (PS93 = right orofacial deficit)")
     nsess = {m: len(M[m]) for m in mice}
     fig.suptitle(f"Cross-mouse cortical representation of spout position (all sessions; n/mouse={nsess})", fontsize=13)
     fig.tight_layout(); p = out / "locanmf_cross_mouse_comparison.png"; fig.savefig(p, dpi=130); plt.close(fig)
