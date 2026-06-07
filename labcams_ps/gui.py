@@ -588,6 +588,18 @@ def _patch_gui_docks() -> None:
         button_row.addWidget(snapshot_button)
         layout.addLayout(button_row)
 
+        # --- snapshot save folder: independent of the acquisition folder; TIFFs
+        #     are written DIRECTLY here (no raw_widefield_data/snapshots nesting) ---
+        snap_row = QHBoxLayout()
+        default_snap = self.parameters.get("snapshot_path") or self.parameters.get("recorder_path", "")
+        self.ps_snapshot_dir = str(default_snap)
+        snap_dir_edit = QLineEdit(self.ps_snapshot_dir)
+        snap_browse = QPushButton("Browse")
+        snap_row.addWidget(QLabel("Snapshot folder"))
+        snap_row.addWidget(snap_dir_edit)
+        snap_row.addWidget(snap_browse)
+        layout.addLayout(snap_row)
+
         status = QLabel("Preview stopped")
         status.setWordWrap(True)
         layout.addWidget(status)
@@ -603,12 +615,53 @@ def _patch_gui_docks() -> None:
             status.setText("Preview stopped")
             _display("[labcams_ps] Preview stopped")
 
+        def choose_snap_folder():
+            d = QFileDialog.getExistingDirectory(self, "Choose snapshot folder",
+                                                 self.ps_snapshot_dir or "")
+            if d:
+                self.ps_snapshot_dir = d
+                snap_dir_edit.setText(d)
+                self.parameters["snapshot_path"] = d
+
         def take_snapshot():
-            self.recController.snapshotButton.click()
+            # Save snapshot TIFF(s) directly into the chosen snapshot folder,
+            # independent of (and not nested under) the acquisition save folder.
+            folder = snap_dir_edit.text().strip()
+            if not folder:
+                status.setText("Set a snapshot folder first")
+                return
+            try:
+                os.makedirs(folder, exist_ok=True)
+            except Exception as err:
+                status.setText("Cannot create snapshot folder: {0}".format(err))
+                return
+            self.ps_snapshot_dir = folder
+            self.parameters["snapshot_path"] = folder
+            cams = getattr(self, "cams", []) or []
+            widgets = getattr(self, "camwidgets", []) or []
+            stamp = datetime.today().strftime("%Y%m%d_%H%M%S")
+            saved = 0
+            for i, (cam, wid) in enumerate(zip(cams, widgets)):
+                dataname = "snapshot"
+                for holder in ("writer", "recorder"):
+                    obj = getattr(cam, holder, None)
+                    if obj is not None and getattr(obj, "dataname", None):
+                        dataname = obj.dataname
+                        break
+                suffix = dataname if len(cams) <= 1 else "{0}_cam{1}".format(dataname, i)
+                fname = os.path.join(folder, "{0}_{1}.tif".format(stamp, suffix))
+                try:
+                    wid.saveImageFromCamera(filename=fname)
+                    saved += 1
+                    _display("[labcams_ps] snapshot -> {0}".format(fname))
+                except Exception as err:
+                    _display("[labcams_ps] snapshot failed: {0}".format(err))
+            status.setText("Saved {0} snapshot(s) to {1}".format(saved, folder))
 
         start_button.clicked.connect(start_preview)
         stop_button.clicked.connect(stop_preview)
         snapshot_button.clicked.connect(take_snapshot)
+        snap_browse.clicked.connect(choose_snap_folder)
 
         dock.setWidget(widget)
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
