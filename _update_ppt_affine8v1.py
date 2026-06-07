@@ -251,10 +251,17 @@ if xday_imgs and xday_div not in present:
     divider(xday_div, "Same-animal across-day registration of the motion-corrected mean 470 nm "
                       "vasculature to a reference session (ROI days; 540x640 CCF frame). "
                       "NCC = masked vessel correlation vs reference (1.0 = reference; higher = better).")
+_xday_slides = {slide_title(s): s for s in prs.slides}
 for an, qc in xday_imgs:
     ct = f"{an}: cross-day vasculature alignment QC"
-    if ct not in present:
-        content(ct, "red/green vessel overlay per day + masked NCC vs reference session", qc, 0.5, 1.4, 12.4)
+    if ct in _xday_slides:   # refresh the embedded image (e.g. greedy -> reference-native)
+        sl = _xday_slides[ct]
+        for sh in [sh for sh in sl.shapes if sh.shape_type == 13]:
+            sh._element.getparent().remove(sh._element)
+        sl.shapes.add_picture(qc, Inches(0.5), Inches(1.4), width=Inches(12.4))
+        xday_added.append(an + "(refresh)")
+    else:
+        content(ct, "red/green vessel overlay per day + masked NCC vs reference (reference-native)", qc, 0.5, 1.4, 12.4)
         xday_added.append(an)
 
 # ---- 4b) Quiet-normalized lick activity (lands before QC; QC is moved to end below) ----

@@ -1,5 +1,6 @@
 {
   "animal": "PS92",
+  "mode": "reference-native",
   "func_channel": 1,
   "reference": "PS92_0605",
   "output": "N:/MICROSCOPE/Priya/Widefield/xday/PS92",
