@@ -17,6 +17,9 @@
     "PS95_0605": {
       "results": "N:/MICROSCOPE/Priya/Widefield/labcams/20260605/PS95_20260605_163102/motion_corrected/wfield_local_results",
       "landmarks": "N:/MICROSCOPE/Priya/Widefield/labcams/20260605/PS95_20260605_163102/raw_widefield_data/dorsal_cortex_landmarks_v1.json"
+    },
+    "PS95_0606": {
+      "results": "N:/MICROSCOPE/Priya/Widefield/labcams/20260606/PS95_20260606_160806/motion_corrected/wfield_local_results"
     }
   }
 }
