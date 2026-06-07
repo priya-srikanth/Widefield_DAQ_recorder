@@ -123,6 +123,20 @@ structurally intact, so this is a *functional* reorganization question, not lesi
   contrast is uninterpretable; need multiple baseline days to set each animal's baseline distribution,
   **engagement/movement matching**, and likely per-position/per-region contrasts (more stable than
   overall accuracy) + the F13 pre-cue readout. Figures: `locanmf_decoder_baseline_variability.png`.
+- **F15. Cross-mouse cortical-representation comparison — PS93's hemisphere asymmetry (all sessions
+  pooled per mouse; `locanmf_cross_mouse.py`).** Motivated by **PS93's RIGHT orofacial deficit**
+  (tongue deviates right, minimal right whisking). Per-mouse SSp-hemisphere-only decoding (first-lick
+  2 s, block-CV): **PS93 SSp-LEFT 0.40 << SSp-RIGHT 0.52 (L−R = −0.12)** vs near-symmetric in the
+  others (PS92 +0.02, PS94 +0.05, PS95 +0.01) — **PS93 is the only mouse with a large SSp left-vs-
+  right asymmetry**, and its LEFT hemisphere (contralateral to the right-side deficit) is the weakest
+  for position decoding while its right is the strongest of any mouse's. Behavioral R-spout recall is
+  intact (0.79), so the signature is **cortical-hemisphere, not spout-side** — consistent with a
+  left-hemisphere substrate for the right orofacial deficit. Encoding EV/position reinforces it:
+  PS93 close_R is **negative** (−0.06, poorly encoded) while close_L is well-encoded (0.15). **n=2 for
+  PS93 (6/5, 6/6); n=2–6 for the others.** Figure: `locanmf_cross_mouse_comparison.png` (6-panel:
+  overall/per-position decoding, L-vs-R spout decodability, SSp-left-vs-right hemisphere, encoding EV,
+  L/R asymmetry indices). 6/6 added all four mice as regime B (cleanpairs frame_map present); decoding
+  sensible (first-lick all 0.73/0.73/0.78/0.87) confirming the frame mapping.
 
 ## 4. When is LocaNMF actually helpful (the synthesis)
 - **Not** for region-level evoked responses / ROI summaries → that equals an Allen-ROI average
