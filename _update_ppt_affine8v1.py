@@ -216,6 +216,47 @@ if os.path.exists(pb0605_sum) and pb0605_title not in present:
                     per, 0.6, 1.7, 12.0)
             pb0605_added.append(an)
 
+# ---- 4a2) 2026-06-06 photobleaching (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+pb0606_dir = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out_0606"
+pb0606_sum = os.path.join(pb0606_dir, "photobleach_SUMMARY.png")
+pb0606_title = "Photobleaching 2026-06-06 (4 sessions)"
+pb0606_added = []
+if os.path.exists(pb0606_sum) and pb0606_title not in present:
+    content(pb0606_title,
+            "415 isosbestic vs 470 functional ROI-median trends + per-session %drift. "
+            "470 stays within a few % (PS92 -2.9, PS93 -1.5, PS94 +0.4, PS95 -6.1); "
+            "larger 415 decline = violet-LED drift (removed by the 0.1 Hz hemo highpass).",
+            pb0606_sum, 0.15, 1.7, 12.9)
+    pb0606_added.append("summary")
+    for an in ("PS92", "PS93", "PS94", "PS95"):
+        per = os.path.join(pb0606_dir, f"photobleach_{an}_0606.png")
+        pt = f"Photobleaching 2026-06-06: {an} per-channel trend"
+        if os.path.exists(per) and pt not in present:
+            content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
+            pb0606_added.append(an)
+
+# ---- 4c) Cross-day vasculature alignment QC (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+xday_root = r"N:\MICROSCOPE\Priya\Widefield\xday"
+xday_div = "Cross-day alignment (vasculature)"
+xday_added = []
+xday_imgs = []
+if os.path.isdir(xday_root):
+    for an in sorted(os.listdir(xday_root)):
+        qc = os.path.join(xday_root, an, f"{an}_cross_day_alignment_qc.png")
+        if os.path.exists(qc):
+            xday_imgs.append((an, qc))
+if xday_imgs and xday_div not in present:
+    divider(xday_div, "Same-animal across-day registration of the motion-corrected mean 470 nm "
+                      "vasculature to a reference session (ROI days; 540x640 CCF frame). "
+                      "NCC = masked vessel correlation vs reference (1.0 = reference; higher = better).")
+for an, qc in xday_imgs:
+    ct = f"{an}: cross-day vasculature alignment QC"
+    if ct not in present:
+        content(ct, "red/green vessel overlay per day + masked NCC vs reference session", qc, 0.5, 1.4, 12.4)
+        xday_added.append(an)
+
 # ---- 4b) Quiet-normalized lick activity (lands before QC; QC is moved to end below) ----
 NLAB = r"N:\MICROSCOPE\Priya\Widefield\labcams"
 present = {slide_title(s) for s in prs.slides}

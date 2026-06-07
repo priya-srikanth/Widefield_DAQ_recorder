@@ -1,0 +1,21 @@
+{
+  "animal": "PS95",
+  "func_channel": 1,
+  "reference": "PS95_0605",
+  "output": "N:/MICROSCOPE/Priya/Widefield/xday/PS95",
+  "warp_u": false,
+  "sessions": {
+    "PS95_0603": {
+      "results": "N:/MICROSCOPE/Priya/Widefield/labcams/20260603/PS95_20260603_194442/motion_corrected/wfield_local_results",
+      "landmarks": "N:/MICROSCOPE/Priya/Widefield/labcams/20260603/PS95_20260603_194442/raw_widefield_data/dorsal_cortex_landmarks_v1.json"
+    },
+    "PS95_0604": {
+      "results": "N:/MICROSCOPE/Priya/Widefield/labcams/20260604/PS95_20260604_165712/motion_corrected/wfield_local_results",
+      "landmarks": "N:/MICROSCOPE/Priya/Widefield/labcams/20260604/PS95_20260604_165712/raw_widefield_data/dorsal_cortex_landmarks_v1.json"
+    },
+    "PS95_0605": {
+      "results": "N:/MICROSCOPE/Priya/Widefield/labcams/20260605/PS95_20260605_163102/motion_corrected/wfield_local_results",
+      "landmarks": "N:/MICROSCOPE/Priya/Widefield/labcams/20260605/PS95_20260605_163102/raw_widefield_data/dorsal_cortex_landmarks_v1.json"
+    }
+  }
+}
