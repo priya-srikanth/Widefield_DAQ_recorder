@@ -222,6 +222,15 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
                 w = Inches(12.5) if kind != "r2_by_region" else Inches(7.5)
                 pic(s, fp, left=(prs.slide_width - w) / 2, top=Inches(1.55), width=w)
 
+    # cross-mouse comparison
+    cm = src / "locanmf_cross_mouse_comparison.png"
+    if cm.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "CROSS-MOUSE: cortical representation of spout position (all sessions)",
+              "Per mouse: overall/per-position decoding, left-vs-right spout decodability, SSp-left-vs-right hemisphere, "
+              "per-position encoding EV, and L/R asymmetry indices. PS93 has a RIGHT orofacial deficit (predicts L/R asymmetry).")
+        pic(s, cm, left=Inches(0.3), top=Inches(1.5), width=Inches(12.7))
+
     # takeaways
     s = prs.slides.add_slide(BLANK); title(s, "Takeaways")
     tf = s.shapes.add_textbox(Inches(0.6), Inches(1.3), Inches(12.0), Inches(5.6)).text_frame; tf.word_wrap = True
