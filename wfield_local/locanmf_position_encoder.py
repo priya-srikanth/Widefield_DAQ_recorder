@@ -25,7 +25,9 @@ import numpy as np
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GroupKFold
 
-from wfield_local.locanmf_cue_lick_analysis import SESSIONS
+from collections import defaultdict
+
+from wfield_local.locanmf_cue_lick_analysis import SESSIONS, ANIMAL_COLOR
 from wfield_local.locanmf_position_decoder import _trial_features, _build_signal
 from wfield_local.plot_lick_aligned_averages import POSITION_NAMES, DISPLAY_ORDER, _load_daq_events
 from wfield_local.plot_spout_trial_averages import _load_daq_events as _load_cue, _classify_cues
@@ -276,6 +278,137 @@ def fig_encoder_vs_svd(label, out):
     return p
 
 
+def _region_feve(label):
+    """Per-region FEVE substrate (fraction of EXPLAINABLE variance the encoder explains), computed at the
+    REGION level by summing sums-of-squares over that region's components (not by averaging per-component
+    fractions). For each LocaNMF component (2 s post-lick, no-baseline, block-CV ridge position->activity):
+      sstot = Σ_trials (X - grand_mean)^2 ;  ssres = Σ (X - pred)^2 ;  betw = Σ_pos n_pos (mu_pos - gm)^2.
+    EXPLAINABLE SS (noise ceiling, the most a position-only model could ever explain) = betw.
+    CAPTURED SS (what the encoder actually explains) = sstot - ssres.
+    Region FEVE = Σ_comp captured / Σ_comp explainable  (1.0 = encoder captures ALL explainable variance).
+    Returns region -> dict(expl, cap, tot, n)."""
+    s = _sess(label); names = _names(s)
+    X, y, g, _, _, reg = _trial_features(s, _args(2.0))
+    pos = np.array(DISPLAY_ORDER); P = np.stack([(y == p).astype(float) for p in pos], 1)
+    pred = np.zeros_like(X); ng = min(5, int(np.unique(g).size))
+    for tr, te in GroupKFold(ng).split(X, y, g):
+        pred[te] = Ridge(alpha=1.0).fit(P[tr], X[tr]).predict(P[te])
+    gm = X.mean(0); sstot = ((X - gm) ** 2).sum(0); ssres = ((X - pred) ** 2).sum(0)
+    betw = np.zeros(X.shape[1])
+    for p in pos:
+        mm = y == p; mu = X[mm].mean(0); betw += mm.sum() * (mu - gm) ** 2
+    cap = sstot - ssres                                    # captured SS per component
+    rn = np.array([names.get(int(reg[i]), "?") for i in range(X.shape[1])])
+    out = {}
+    for r in sorted(set(rn)):
+        m = rn == r
+        if m.sum() < 2:
+            continue
+        out[r] = dict(expl=float(betw[m].sum()), cap=float(cap[m].sum()), tot=float(sstot[m].sum()), n=int(m.sum()))
+    return out
+
+
+def _feve_regions(res, floor):
+    """Common region axis across sessions/animals: pool explainable + total SS over ALL provided sessions,
+    keep regions whose pooled explainable FRACTION (expl/tot) exceeds `floor` (i.e. there is non-trivial
+    position-explainable signal to normalize against), sorted by pooled explainable variance (desc)."""
+    pe, pt = defaultdict(float), defaultdict(float)
+    for d in res.values():
+        for r, v in d.items():
+            pe[r] += v["expl"]; pt[r] += v["tot"]
+    regs = [r for r in pe if pt[r] > 0 and pe[r] / pt[r] > floor]
+    return sorted(regs, key=lambda r: pe[r], reverse=True)
+
+
+def _feve_pct(d, regs, floor):
+    """Per-region FEVE in PERCENT for one (pooled) session-group dict region->summed-SS; NaN where that
+    group's own explainable fraction is below `floor` (nothing meaningful to normalize against)."""
+    out = []
+    for r in regs:
+        v = d.get(r)
+        if v is None or v["expl"] <= 0 or v["expl"] / max(v["tot"], 1e-12) <= floor:
+            out.append(np.nan)
+        else:
+            out.append(100.0 * v["cap"] / v["expl"])
+    return np.array(out)
+
+
+def _pool_region(dicts):
+    """Sum per-region SS across a list of per-session region dicts -> one pooled region dict."""
+    agg = defaultdict(lambda: dict(expl=0.0, cap=0.0, tot=0.0, n=0))
+    for d in dicts:
+        for r, v in d.items():
+            a = agg[r]; a["expl"] += v["expl"]; a["cap"] += v["cap"]; a["tot"] += v["tot"]; a["n"] += v["n"]
+    return agg
+
+
+def _feve_label_colors(regs):
+    return ["#c0392b" if r.startswith(("SSp", "SSs")) else "#2980b9" if r.startswith("MO") else "#333" for r in regs]
+
+
+def _feve_heatmap(ax, M, rows, regs, fig):
+    """Shared FEVE heatmap: rows x regions, cell = FEVE% (0-100 viridis; <0 and NaN greyed), annotated."""
+    cmap = plt.cm.viridis.copy(); cmap.set_bad("#dddddd")
+    Mc = np.where(M < 0, np.nan, M)                                    # below-0 FEVE shown as 'no capture' grey
+    im = ax.imshow(Mc, cmap=cmap, vmin=0, vmax=100, aspect="auto")
+    ax.set_xticks(range(len(regs))); ax.set_xticklabels(regs, rotation=60, ha="right", fontsize=6.5)
+    for t, c in zip(ax.get_xticklabels(), _feve_label_colors(regs)):
+        t.set_color(c)
+    ax.set_yticks(range(len(rows))); ax.set_yticklabels(rows, fontsize=8)
+    for i in range(len(rows)):
+        for j in range(len(regs)):
+            v = M[i, j]
+            if np.isnan(v):
+                continue
+            ax.text(j, i, f"{v:.0f}", ha="center", va="center", fontsize=5.2,
+                    color="white" if (0 <= v < 60) else "black")
+    cb = fig.colorbar(im, ax=ax, shrink=0.7, pad=0.01); cb.set_label("FEVE — % of explainable variance captured", fontsize=8)
+    return im
+
+
+def fig_region_feve_pooled(res, out, floor=0.02):
+    """ACROSS-SESSIONS: per region, FEVE (% of explainable/ceiling variance the encoder captures) pooled
+    within each animal (SS summed over all of that animal's sessions). Heatmap animal x region; 100% = the
+    encoder captures all position-explainable variance in that region. Grey = <0 (no capture) or no
+    explainable signal. Regions sorted by pooled explainable variance; SSp red / MO blue x-labels."""
+    by = defaultdict(list)
+    for lab in res:
+        by[lab[:4]].append(lab)
+    animals = sorted(by); regs = _feve_regions(res, floor)
+    pooled = {a: _pool_region([res[l] for l in by[a]]) for a in animals}
+    rows = [f"{a} (n={len(by[a])})" for a in animals]
+    M = np.array([_feve_pct(pooled[a], regs, floor) for a in animals])
+    fig, ax = plt.subplots(figsize=(max(12, 0.30 * len(regs)), 0.6 * len(animals) + 2.6))
+    _feve_heatmap(ax, M, rows, regs, fig)
+    ax.set_title(f"Encoder FEVE by region — pooled per animal across ALL sessions "
+                 f"(100% = encoder captures all position-explainable variance; SSp red / MO blue labels; "
+                 f"regions with explainable frac >{floor}, sorted by explainable variance)", fontsize=9.5)
+    fig.tight_layout(); p = out / "locanmf_encoder_feve_by_region_pooled.png"; fig.savefig(p, dpi=140); plt.close(fig)
+    return p
+
+
+def fig_region_feve_sessions(res, out, floor=0.02):
+    """INDIVIDUAL SESSIONS: same FEVE-by-region heatmap, one row per session (grouped by animal) -> shows
+    session-to-session stability of each region's ceiling-normalized encoding within an animal."""
+    by = defaultdict(list)
+    for lab in res:
+        by[lab[:4]].append(lab)
+    animals = sorted(by); regs = _feve_regions(res, floor)
+    labs = [l for a in animals for l in sorted(by[a], key=lambda x: x[-4:])]
+    rows = [f"{l[:4]} {l[-4:-2]}/{l[-2:]}" for l in labs]
+    M = np.array([_feve_pct(res[l], regs, floor) for l in labs])
+    fig, ax = plt.subplots(figsize=(max(12, 0.30 * len(regs)), 0.42 * len(labs) + 2.6))
+    _feve_heatmap(ax, M, rows, regs, fig)
+    # separators between animals
+    seen = 0
+    for a in animals[:-1]:
+        seen += len(by[a]); ax.axhline(seen - 0.5, color="k", lw=1.2)
+    ax.set_title(f"Encoder FEVE by region — individual sessions (grouped by animal) "
+                 f"(% of explainable variance captured; 100% = all; regions explainable frac >{floor})", fontsize=9.5)
+    fig.tight_layout(); p = out / "locanmf_encoder_feve_by_region_sessions.png"; fig.savefig(p, dpi=140); plt.close(fig)
+    return p
+
+
 def fig_quiet_drift(labels, out, tag):
     """Time-local quiet (rest) baseline over the session, pooled over components, per session. Shows the
     slow drift (photobleaching/state) the time-local baseline tracks; small in dF/F, but the right
@@ -311,6 +444,19 @@ def main() -> int:
     for f in (fig_ev_by_position, fig_ev_ceiling_by_position, fig_quiet_drift):
         try:
             print("wrote", f(labs, args.output, args.date).name, flush=True)
+        except Exception as ex:
+            print(f"{f.__name__}: FAILED {type(ex).__name__}: {str(ex)[:80]}", flush=True)
+    # FEVE by region — pooled-per-animal and per-session, over ALL sessions (date-independent)
+    all_labs = [x["label"] for x in SESSIONS]
+    res = {}
+    for lab in all_labs:
+        try:
+            res[lab] = _region_feve(lab)
+        except Exception as ex:
+            print(f"  {lab} feve skip: {type(ex).__name__}: {str(ex)[:60]}", flush=True)
+    for f in (fig_region_feve_pooled, fig_region_feve_sessions):
+        try:
+            print("wrote", f(res, args.output).name, flush=True)
         except Exception as ex:
             print(f"{f.__name__}: FAILED {type(ex).__name__}: {str(ex)[:80]}", flush=True)
     return 0

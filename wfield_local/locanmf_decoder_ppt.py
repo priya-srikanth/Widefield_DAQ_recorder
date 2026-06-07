@@ -204,6 +204,21 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "Left: explainable variance (noise ceiling) per position. Right: captured/ceiling. Center positions have "
               "~0 ceiling (no position-distinct signal) -> their low raw EV is nothing-to-explain, not encoder failure.")
         pic(s, evc, left=Inches(0.3), top=Inches(1.7), width=Inches(12.7))
+    fvp = src / "locanmf_encoder_feve_by_region_pooled.png"
+    if fvp.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "ENCODER — FEVE by region, pooled per animal (across ALL sessions)",
+              "FEVE = % of EXPLAINABLE (ceiling) variance the encoder captures, per region (SS pooled over each animal's "
+              "sessions). 100% = all position-explainable variance captured; SSp/MO labels in red/blue. Region axis = "
+              "regions with non-trivial explainable signal, sorted by explainable variance.")
+        pic(s, fvp, left=Inches(0.2), top=Inches(1.6), width=Inches(12.9))
+    fvs = src / "locanmf_encoder_feve_by_region_sessions.png"
+    if fvs.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "ENCODER — FEVE by region, individual sessions per animal",
+              "Same ceiling-normalized metric, one row per animal with a bar per session (date) -> session-to-session "
+              "stability of each region's encoding. PS93's SSp-left vs -right split is visible here too.")
+        pic(s, fvs, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
     qd = src / "locanmf_encoder_quiet_drift_0606.png"
     if qd.exists():
         s = prs.slides.add_slide(BLANK)
