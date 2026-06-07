@@ -151,8 +151,9 @@ def fig_encoding_r2(label, out, topn=16):
     ax = axes[0]
     ax.barh(y + 0.0, expl, 0.4, color="#bbbbbb", label="explainable (noise ceiling)")
     ax.barh(y - 0.42, cap, 0.4, color=cols, label="captured (CV)")
-    ax.set_yticks(y); ax.set_yticklabels(regs, fontsize=8); ax.set_xlabel("fraction of single-trial variance")
-    ax.set_title("absolute: explainable vs captured"); ax.legend(fontsize=8)
+    ylab = [f"{r} (n={fe[r]['n']})" + ("*" if fe[r]["n"] == 1 else "") for r in regs]
+    ax.set_yticks(y); ax.set_yticklabels(ylab, fontsize=8); ax.set_xlabel("fraction of single-trial variance")
+    ax.set_title("absolute: explainable vs captured  (* = single component, noisier)"); ax.legend(fontsize=8)
     ax = axes[1]
     ax.barh(y, feve, 0.55, color=cols)
     ax.axvline(1.0, color="k", ls="--", lw=1.0)
@@ -319,8 +320,8 @@ def _region_feve(label):
     out = {}
     for r in sorted(set(rn)):
         m = rn == r
-        if m.sum() < 2:
-            continue
+        if m.sum() < 1:                       # include every region with >=1 component (single-comp = noisier,
+            continue                          # flagged via n in the figures, not dropped -> consistent region sets)
         out[r] = dict(expl=float(betw[m].sum()), cap=float(cap[m].sum()), tot=float(sstot[m].sum()), n=int(m.sum()))
     return out
 
