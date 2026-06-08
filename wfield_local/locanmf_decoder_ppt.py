@@ -245,6 +245,14 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "Per mouse: overall/per-position decoding, left-vs-right spout decodability, SSp-left-vs-right hemisphere, "
               "per-position encoding EV, and L/R asymmetry indices. PS93 has a RIGHT orofacial deficit (predicts L/R asymmetry).")
         pic(s, cm, left=Inches(0.3), top=Inches(1.5), width=Inches(12.7))
+    wac = src / "locanmf_within_animal_consistency.png"
+    if wac.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "WITHIN-ANIMAL consistency of per-position decode/encode across sessions",
+              "Each animal's per-position profile per session (grey) + mean +- SD (bold). Pairwise r = pattern "
+              "reproducibility, mean SD = magnitude noise floor a post-stroke change must clear. Decode SD ~0.15-0.19 "
+              "(6-session animals span the noisy/low-engagement early days); consistency is engagement-dependent.")
+        pic(s, wac, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
 
     # takeaways
     s = prs.slides.add_slide(BLANK); title(s, "Takeaways")

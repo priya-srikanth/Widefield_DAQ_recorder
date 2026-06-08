@@ -32,7 +32,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import GroupKFold, cross_val_predict
 from sklearn.metrics import accuracy_score, confusion_matrix
 
-from wfield_local.locanmf_cue_lick_analysis import SESSIONS
+from wfield_local.locanmf_cue_lick_analysis import SESSIONS, ANIMAL_COLOR
 from wfield_local.locanmf_position_decoder import _trial_features
 from wfield_local.plot_lick_aligned_averages import POSITION_NAMES, DISPLAY_ORDER
 
@@ -179,11 +179,73 @@ def fig_cross_mouse(out):
     return p
 
 
+def _pairwise_r(vecs):
+    """Mean pairwise Pearson r between session per-position vectors -> consistency of the PROFILE SHAPE
+    across sessions (1 = identical pattern every session; ~0 = unrelated). NaN if <2 usable sessions."""
+    vecs = [np.asarray(v, float) for v in vecs if np.all(np.isfinite(v)) and np.std(v) > 1e-9]
+    rs = [np.corrcoef(vecs[i], vecs[j])[0, 1] for i in range(len(vecs)) for j in range(i + 1, len(vecs))]
+    return float(np.nanmean(rs)) if rs else np.nan
+
+
+def fig_within_animal_consistency(out):
+    """How reproducible is each animal's per-position pattern across its sessions? For DECODING (per-
+    position recall) and ENCODING (per-position explained variance): overlay each session's 6-position
+    profile (grey) + mean +- SD (bold), per animal. Title reports the mean pairwise cross-session
+    correlation (pattern consistency) and the mean per-position SD (magnitude consistency). This sets the
+    within-animal noise floor a post-stroke change must exceed."""
+    by = defaultdict(list)
+    for s in SESSIONS:
+        by[s["label"][:4]].append(s["label"])
+    mice = sorted(by)
+    data = {}
+    for m in mice:
+        R, E, labs = [], [], []
+        for lab in sorted(by[m], key=lambda l: l[-4:]):
+            try:
+                r = per_session(lab)
+            except Exception as ex:
+                print(f"  {lab} skip: {str(ex)[:50]}", flush=True); continue
+            R.append(r["recall"]); E.append(r["ev"]); labs.append(f"{lab[-4:-2]}/{lab[-2:]}")
+        if R:
+            data[m] = dict(recall=np.array(R), ev=np.array(E), labels=labs)
+    mice = [m for m in mice if m in data]
+    fig, axes = plt.subplots(2, len(mice), figsize=(3.7 * len(mice), 8), squeeze=False)
+    summ = {}
+    for j, m in enumerate(mice):
+        for row, key, ylab, chance in [(0, "recall", "per-position recall (decode)", 1 / 6),
+                                       (1, "ev", "explained variance (encode)", 0.0)]:
+            ax = axes[row][j]; Mx = data[m][key]
+            for i in range(Mx.shape[0]):
+                ax.plot(range(6), Mx[i], marker="o", ms=3, lw=1, alpha=0.45, color="#888",
+                        label=data[m]["labels"][i] if row == 0 else None)
+            mean = np.nanmean(Mx, 0); sd = np.nanstd(Mx, 0)
+            ax.plot(range(6), mean, marker="o", ms=5, lw=2.4, color=ANIMAL_COLOR.get(m, "k"))
+            ax.fill_between(range(6), mean - sd, mean + sd, color=ANIMAL_COLOR.get(m, "k"), alpha=0.15)
+            r = _pairwise_r(list(Mx)); msd = float(np.nanmean(sd))
+            summ[(m, key)] = (r, msd, Mx.shape[0])
+            ax.axhline(chance, color="grey", ls="--", lw=0.7)
+            ax.set_xticks(range(6)); ax.set_xticklabels(POSN, rotation=45, ha="right", fontsize=6)
+            ax.set_title(f"{m} {key} (n={Mx.shape[0]})\npairwise r={r:.2f}, mean SD={msd:.2f}", fontsize=9)
+            if j == 0:
+                ax.set_ylabel(ylab, fontsize=9)
+            if row == 0:
+                ax.legend(fontsize=6, title="session", ncol=2)
+    fig.suptitle("Within-animal per-position consistency across sessions "
+                 "(grey = each session, bold = mean +- SD; high pairwise r + low SD = reproducible)", fontsize=12)
+    fig.tight_layout(); p = out / "locanmf_within_animal_consistency.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    print("Within-animal cross-session consistency (pairwise r / mean per-position SD):", flush=True)
+    for m in mice:
+        rr, sr, n = summ[(m, "recall")]; re, se, _ = summ[(m, "ev")]
+        print(f"  {m} (n={n}): decode r={rr:.2f} SD={sr:.2f} | encode r={re:.2f} SD={se:.2f}", flush=True)
+    return p
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
     args = ap.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     print("wrote", fig_cross_mouse(args.output).name, flush=True)
+    print("wrote", fig_within_animal_consistency(args.output).name, flush=True)
     return 0
 
 
