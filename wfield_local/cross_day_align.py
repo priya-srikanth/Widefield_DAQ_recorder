@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 import cv2
@@ -215,6 +216,32 @@ def run_reference_native(cfg, out, func):
                     uk = cv2.resize(uk, (w, h), interpolation=cv2.INTER_AREA)
                 Ux[..., k] = _warp_native_to_ccf(cv2.warpAffine(uk, w2x3, (w, h), flags=cv2.INTER_LINEAR), ref_T)
             np.save(out / f"{sid}_U_xday.npy", Ux)
+            if sid != ref_id:
+                # assemble a LocaNMF/maps-ready allen dir in the REFERENCE's CCF for
+                # this session (U + both-channel mean warped to ref CCF; atlas/mask
+                # copied from the reference's own Allen alignment).
+                ref_allen = Path(ref["results"]) / "allen_aligned_affine8v1"
+                ad = Path(s["results"]) / cfg.get("allen_dir_name", "allen_aligned_xday6")
+                ad.mkdir(parents=True, exist_ok=True)
+                np.save(ad / "U_atlas.npy", Ux)
+                fa = np.load(Path(s["results"]) / "frames_average.npy")  # (2,H,W) raw mean
+                fax = np.empty((fa.shape[0], *DIMS), np.float32)
+                for c in range(fa.shape[0]):
+                    ck = fa[c]
+                    if ck.shape != (h, w):
+                        ck = cv2.resize(ck, (w, h), interpolation=cv2.INTER_AREA)
+                    fax[c] = _warp_native_to_ccf(cv2.warpAffine(ck, w2x3, (w, h), flags=cv2.INTER_LINEAR), ref_T)
+                np.save(ad / "frames_average_atlas.npy", fax)
+                for fn in ("allen_area_atlas_native_grid.npy", "allen_brain_mask_native_grid.npy", "allen_area_names.json"):
+                    src = ref_allen / fn
+                    if src.exists():
+                        shutil.copy2(src, ad / fn)
+                (ad / "cross_day_allen_summary.json").write_text(json.dumps(
+                    {"session": sid, "reference": ref_id, "ncc_to_ref": float(ncc),
+                     "note": "U + frames_average warped to reference CCF via session->ref "
+                             "(native phase-corr) + reference Allen transform; atlas/mask from reference."},
+                    indent=2))
+                print(f"[{sid}] emitted allen dir -> {ad}", flush=True)
 
     # QC in the reference NATIVE frame (where the alignment is measured)
     ids = list(sessions); n = len(ids)
