@@ -137,6 +137,14 @@ structurally intact, so this is a *functional* reorganization question, not lesi
   overall/per-position decoding, L-vs-R spout decodability, SSp-left-vs-right hemisphere, encoding EV,
   L/R asymmetry indices). 6/6 added all four mice as regime B (cleanpairs frame_map present); decoding
   sensible (first-lick all 0.73/0.73/0.78/0.87) confirming the frame mapping.
+- **F15a. PS93 hemisphere asymmetry holds at n=3 (6/5,6/6,6/7).** Adding 6/7 (all four regime B; first-
+  lick 0.84/0.82/0.80/0.91, SSp 0.72–0.84): pooled SSp-LEFT vs -RIGHT is **PS93 0.43 << 0.55 (L−R
+  = −0.12)** vs PS92 +0.02, PS94 +0.06, PS95 +0.01 — same direction and magnitude as n=2, now stable
+  across three sessions; PS93 R-spout recall still intact (0.82). The cross-mouse bar panels now show
+  **mean ± SEM with individual session points**, and the encoder reports explained variance both raw
+  (fraction of single-trial variance) and **normalized-to-1.0 FEVE** (captured/explainable per region,
+  with per-session + pooled-per-animal FEVE-by-region heatmaps over all 64 atlas regions). Component
+  counts 6/7: PS92 126, PS93 102, PS94 93, PS95 129.
 
 ## 4. When is LocaNMF actually helpful (the synthesis)
 - **Not** for region-level evoked responses / ROI summaries → that equals an Allen-ROI average

@@ -87,6 +87,15 @@ SESSIONS = [
          h5=f"{D}/20260606/PS94_20260606_140912.h5", regime="B", fmdir=None),
     dict(label="PS95_0606", mc=f"{L}/20260606/PS95_20260606_160806/motion_corrected",
          h5=f"{D}/20260606/PS95_20260606_160825.h5", regime="B", fmdir=None),
+    # 6/7. All four have *cleanpairs_frame_map.npz in mc -> regime B (fmdir=None), same as 6/5, 6/6.
+    dict(label="PS92_0607", mc=f"{L}/20260607/PS92_20260607_121538/motion_corrected",
+         h5=f"{D}/20260607/PS92_20260607_121551.h5", regime="B", fmdir=None),
+    dict(label="PS93_0607", mc=f"{L}/20260607/PS93_20260607_174844/motion_corrected",
+         h5=f"{D}/20260607/PS93_20260607_174854.h5", regime="B", fmdir=None),
+    dict(label="PS94_0607", mc=f"{L}/20260607/PS94_20260607_140731/motion_corrected",
+         h5=f"{D}/20260607/PS94_20260607_140813.h5", regime="B", fmdir=None),
+    dict(label="PS95_0607", mc=f"{L}/20260607/PS95_20260607_155000/motion_corrected",
+         h5=f"{D}/20260607/PS95_20260607_155400.h5", regime="B", fmdir=None),
 ]
 
 

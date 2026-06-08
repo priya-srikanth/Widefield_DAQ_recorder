@@ -11,7 +11,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 
 NAVY = RGBColor(0x1F, 0x33, 0x55); GREY = RGBColor(0x55, 0x55, 0x55); RED = RGBColor(0xB0, 0x22, 0x22)
-DAYS = [("0601", "6/1"), ("0602", "6/2"), ("0603", "6/3"), ("0604", "6/4"), ("0605", "6/5"), ("0606", "6/6")]
+DAYS = [("0601", "6/1"), ("0602", "6/2"), ("0603", "6/3"), ("0604", "6/4"), ("0605", "6/5"), ("0606", "6/6"), ("0607", "6/7")]
 
 
 def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path:
@@ -136,17 +136,17 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "When is position info present, and does the temporal profile beat the window-mean?")
         pic(s, fp, left=Inches(0.4), top=Inches(1.5), width=Inches(12.5))
 
-    rc = src / "locanmf_decoder_rolling_cue_0606.png"
+    rc = src / "locanmf_decoder_rolling_cue_0607.png"
     if rc.exists():
         s = prs.slides.add_slide(BLANK)
-        title(s, "6/6 cue-aligned rolling decoder (pre-cue ENL -> post-cue)",
+        title(s, "6/7 cue-aligned rolling decoder (pre-cue ENL -> post-cue)",
               "Position decodability ramps through the longer 2-3s ENL (maintained code), peaks ~0.5-0.8s post-cue. "
-              "PS93 now 2 sessions. Sliding 0.5s window, block-CV.")
+              "PS93 now 3 sessions. Sliding 0.5s window, block-CV.")
         pic(s, rc, left=Inches(1.4), top=Inches(1.5), width=Inches(10.5))
-    lr = src / "locanmf_decoder_rolling_laterality_0606.png"
+    lr = src / "locanmf_decoder_rolling_laterality_0607.png"
     if lr.exists():
         s = prs.slides.add_slide(BLANK)
-        title(s, "6/6 rolling decoder: laterality (L/center/R) vs full 6-way",
+        title(s, "6/7 rolling decoder: laterality (L/center/R) vs full 6-way",
               "Collapsing to laterality (3-way, chance 0.33) gives higher ABSOLUTE accuracy but similar/slightly WORSE "
               "above-chance than 6-way -- the close/far distinction carries real information; collapsing doesn't help.")
         pic(s, lr, left=Inches(2.0), top=Inches(1.5), width=Inches(9.5))
@@ -177,27 +177,27 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
             pic(s, fp, left=Inches(0.3), top=Inches(1.6), width=Inches(12.7))
 
     # ENCODER section (reverse model: position -> expected activity)
-    encs = [f"{an}_0606" for an in ("PS92", "PS93", "PS94", "PS95")]
+    encs = [f"{an}_0607" for an in ("PS92", "PS93", "PS94", "PS95")]
     if any((src / f"locanmf_encoder_predicted_maps_{l}.png").exists() for l in encs):
         s = prs.slides.add_slide(BLANK)
         title(s, "ENCODER — position -> expected neural activity (reverse of the decoder)",
               "Fit pre-stroke; post-stroke the residual (observed - predicted) per INTENDED position = the lesion's "
               "effect, computable even on no-lick/failed trials. Predicted maps + encoding R^2 + expected dynamics follow.")
-    vs = src / "locanmf_encoder_vs_svd_PS95_0606.png"
+    vs = src / "locanmf_encoder_vs_svd_PS95_0607.png"
     if vs.exists():
         s = prs.slides.add_slide(BLANK)
         title(s, "VALIDATION: encoder (LocaNMF) maps vs SVD pixel maps",
               "Matched cue-aligned pre-cue-delta. Per-position spatial r = 0.99-1.00 (all sessions) -> LocaNMF reconstruction "
               "is the same as the SVD pixel data; the encoder's predicted maps are the genuine cortical patterns.")
         pic(s, vs, left=Inches(0.3), top=Inches(2.2), width=Inches(12.7))
-    evp = src / "locanmf_encoder_ev_by_position_0606.png"
+    evp = src / "locanmf_encoder_ev_by_position_0607.png"
     if evp.exists():
         s = prs.slides.add_slide(BLANK)
         title(s, "ENCODER — explained variance per spout position (per session)",
               "Held-out R^2 restricted to each position's trials. Lateral/extreme positions are most distinctly encoded; "
               "center positions sit near the grand mean (low/negative). PS94 weak throughout.")
         pic(s, evp, left=Inches(0.8), top=Inches(1.7), width=Inches(11.5))
-    evc = src / "locanmf_encoder_ev_ceiling_by_position_0606.png"
+    evc = src / "locanmf_encoder_ev_ceiling_by_position_0607.png"
     if evc.exists():
         s = prs.slides.add_slide(BLANK)
         title(s, "ENCODER — explained variance per position RELATIVE TO CEILING",
@@ -219,7 +219,7 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "Same ceiling-normalized metric, one row per animal with a bar per session (date) -> session-to-session "
               "stability of each region's encoding. PS93's SSp-left vs -right split is visible here too.")
         pic(s, fvs, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
-    qd = src / "locanmf_encoder_quiet_drift_0606.png"
+    qd = src / "locanmf_encoder_quiet_drift_0607.png"
     if qd.exists():
         s = prs.slides.add_slide(BLANK)
         title(s, "ENCODER baseline: time-local quiet (rest) reference",
