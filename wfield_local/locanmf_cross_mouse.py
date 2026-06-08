@@ -187,14 +187,17 @@ def _pairwise_r(vecs):
     return float(np.nanmean(rs)) if rs else np.nan
 
 
-def fig_within_animal_consistency(out):
+def fig_within_animal_consistency(out, dates=None, tag=None):
     """How reproducible is each animal's per-position pattern across its sessions? For DECODING (per-
     position recall) and ENCODING (per-position explained variance): overlay each session's 6-position
     profile (grey) + mean +- SD (bold), per animal. Title reports the mean pairwise cross-session
     correlation (pattern consistency) and the mean per-position SD (magnitude consistency). This sets the
-    within-animal noise floor a post-stroke change must exceed."""
+    within-animal noise floor a post-stroke change must exceed. `dates` (set of 'MMDD') restricts to a
+    session subset; `tag` suffixes the filename (default = all sessions, no suffix)."""
     by = defaultdict(list)
     for s in SESSIONS:
+        if dates is not None and s["label"][-4:] not in dates:
+            continue
         by[s["label"][:4]].append(s["label"])
     mice = sorted(by)
     data = {}
@@ -230,10 +233,13 @@ def fig_within_animal_consistency(out):
                 ax.set_ylabel(ylab, fontsize=9)
             if row == 0:
                 ax.legend(fontsize=6, title="session", ncol=2)
-    fig.suptitle("Within-animal per-position consistency across sessions "
+    sub = f" [{tag}]" if tag else ""
+    fig.suptitle(f"Within-animal per-position consistency across sessions{sub} "
                  "(grey = each session, bold = mean +- SD; high pairwise r + low SD = reproducible)", fontsize=12)
-    fig.tight_layout(); p = out / "locanmf_within_animal_consistency.png"; fig.savefig(p, dpi=130); plt.close(fig)
-    print("Within-animal cross-session consistency (pairwise r / mean per-position SD):", flush=True)
+    fig.tight_layout()
+    p = out / (f"locanmf_within_animal_consistency_{tag}.png" if tag else "locanmf_within_animal_consistency.png")
+    fig.savefig(p, dpi=130); plt.close(fig)
+    print(f"Within-animal cross-session consistency{sub} (pairwise r / mean per-position SD):", flush=True)
     for m in mice:
         rr, sr, n = summ[(m, "recall")]; re, se, _ = summ[(m, "ev")]
         print(f"  {m} (n={n}): decode r={rr:.2f} SD={sr:.2f} | encode r={re:.2f} SD={se:.2f}", flush=True)
