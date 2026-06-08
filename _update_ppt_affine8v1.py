@@ -56,6 +56,14 @@ SESSIONS = [
      fr"{D}\20260606\PS94_20260606_140854\motion_corrected", "PS94_0606_affine8v1"),
     ("PS95 - 2026-06-06", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 2 s pre",
      fr"{D}\20260606\PS95_20260606_160806\motion_corrected", "PS95_0606_affine8v1"),
+    ("PS92 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260607\PS92_20260607_121538\motion_corrected", "PS92_0607_affine8v1"),
+    ("PS93 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260607\PS93_20260607_174844\motion_corrected", "PS93_0607_affine8v1"),
+    ("PS94 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260607\PS94_20260607_140731\motion_corrected", "PS94_0607_affine8v1"),
+    ("PS95 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260607\PS95_20260607_155000\motion_corrected", "PS95_0607_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
@@ -243,6 +251,34 @@ if os.path.exists(pb0606_sum) and pb0606_title not in present:
         if os.path.exists(per) and pt not in present:
             content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
             pb0606_added.append(an)
+
+# ---- 4a3) 2026-06-07 photobleaching (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+pb0607_dir = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out_0607"
+pb0607_sum = os.path.join(pb0607_dir, "photobleach_SUMMARY.png")
+pb0607_title = "Photobleaching 2026-06-07 (4 sessions)"
+if os.path.exists(pb0607_sum) and pb0607_title not in present:
+    content(pb0607_title,
+            "415 isosbestic vs 470 functional ROI-median trends + per-session %drift. "
+            "470 stays within a few % (PS92 -2.1, PS93 +1.3, PS94 +1.3, PS95 -4.1); "
+            "larger 415 decline = violet-LED drift (removed by the 0.1 Hz hemo highpass).",
+            pb0607_sum, 0.15, 1.7, 12.9)
+    for an in ("PS92", "PS93", "PS94", "PS95"):
+        per = os.path.join(pb0607_dir, f"photobleach_{an}_0607.png")
+        pt = f"Photobleaching 2026-06-07: {an} per-channel trend"
+        if os.path.exists(per) and pt not in present:
+            content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
+
+# ---- 4a4) Cross-day RAW fluorescence intensity (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+xint_png = r"C:\Github\Widefield_DAQ_recorder\_crossday_intensity_out\crossday_raw_intensity.png"
+xint_title = "Cross-day raw fluorescence intensity (per animal)"
+if os.path.exists(xint_png) and xint_title not in present:
+    content(xint_title,
+            "Brain-ROI median raw counts (415 + 470) per animal across days, from each "
+            "session's frames_average. CAVEAT: LED power is manually titrated day-to-day, so "
+            "a trend may reflect the LED setting, not photobleaching. No monotonic decline seen.",
+            xint_png, 0.4, 1.7, 12.5)
 
 # ---- 4c) Cross-day vasculature alignment QC (idempotent) ----
 present = {slide_title(s) for s in prs.slides}
