@@ -35,6 +35,14 @@ then refresh the deck + cross-day QC.
 - M: standby = raw `.dat` + corrected `.bin` (huge files), `M:\Widefield\labcams\<date>\<session>\`.
 - N: MICROSCOPE = analyzed (SVD, CCF-aligned, maps, QC, DAQ, deck); NOT the `.bin`.
 
+## Re-run LocaNMF after a motion redo (GPU lane)
+Any session whose motion correction is re-done with the sign-fixed code gets a NEW
+`SVTcorr.npy` + `allen_aligned_affine8v1/` (its SVD and CCF-aligned U change). **Any
+LocaNMF result computed on the pre-fix inputs is stale and must be re-run** against the
+corrected inputs now on N:. This applies to every session in the bulk redo batch
+(`_redo_motion_all.py`) once it lands, plus PS93 6/6 (already corrected) and PS94 6/5.
+GPU: re-run LocaNMF for a session after its `wfield_local_results` mtime updates on N:.
+
 ## Allen-dir naming (GPU/LocaNMF)
 Cross-session-to-6/6 emits the CCF allen dir as **`allen_aligned_affine8v1`** (the
 standard name the GPU/LocaNMF, maps, and deck all expect) -- it CONTAINS the 6/6-CCF
