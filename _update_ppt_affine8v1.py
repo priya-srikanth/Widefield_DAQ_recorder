@@ -190,13 +190,20 @@ qc_added = []
 if qc_sessions and qc_div not in present:
     divider(qc_div, "Per-frame rigid shifts + histogram, mean-image sharpness (raw vs corrected), "
                     "and corrected temporal-std (residual motion). Median shift should be sub-pixel.")
+_qc_slides = {slide_title(s): s for s in prs.slides}
 for title, mc, lab in qc_sessions:
     ct = f"{title}: motion-correction QC"
-    if ct in present:
-        continue
-    content(ct, "Shift traces / magnitude histogram / sharpness / residual-motion std",
-            os.path.join(mc, "motion_qc", f"{lab}_motion_qc.png"), 0.15, 1.35, 12.9)
-    qc_added.append(title)
+    qcpng = os.path.join(mc, "motion_qc", f"{lab}_motion_qc.png")
+    if ct in _qc_slides:   # refresh the QC image in place (e.g. after re-doing motion correction)
+        sl = _qc_slides[ct]
+        for sh in [sh for sh in sl.shapes if sh.shape_type == 13]:
+            sh._element.getparent().remove(sh._element)
+        sl.shapes.add_picture(qcpng, Inches(0.15), Inches(1.35), width=Inches(12.9))
+        qc_added.append(title + "(refresh)")
+    else:
+        content(ct, "Shift traces / magnitude histogram / sharpness / residual-motion std",
+                qcpng, 0.15, 1.35, 12.9)
+        qc_added.append(title)
 
 # ---- 4) Photobleaching / LED-drift summary (idempotent) ----
 present = {slide_title(s) for s in prs.slides}
