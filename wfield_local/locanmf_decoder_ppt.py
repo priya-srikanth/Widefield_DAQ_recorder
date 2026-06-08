@@ -253,6 +253,15 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "reproducibility, mean SD = magnitude noise floor a post-stroke change must clear. Decode SD ~0.15-0.19 "
               "(6-session animals span the noisy/low-engagement early days); consistency is engagement-dependent.")
         pic(s, wac, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
+    wac3 = src / "locanmf_within_animal_consistency_0605-0607.png"
+    if wac3.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "WITHIN-ANIMAL consistency on 3 consecutive matched-engagement days (6/5-6/7)",
+              "Same analysis restricted to 6/5-6/7. Decode per-position SD tightens to ~0.04-0.08 (vs ~0.15-0.19 "
+              "across all baseline days) -> the all-sessions variability was the noisy/low-engagement early days "
+              "(6/1,6/4), not intrinsic. NB pairwise r understates consistency for flat high-recall profiles (PS95 "
+              "r=0.30 but SD=0.04) -> trust SD there. Engagement-matched consecutive baselines => noise floor ~0.05.")
+        pic(s, wac3, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
 
     # takeaways
     s = prs.slides.add_slide(BLANK); title(s, "Takeaways")
