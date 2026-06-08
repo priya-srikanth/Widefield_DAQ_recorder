@@ -34,3 +34,8 @@ then refresh the deck + cross-day QC.
 ## Servers
 - M: standby = raw `.dat` + corrected `.bin` (huge files), `M:\Widefield\labcams\<date>\<session>\`.
 - N: MICROSCOPE = analyzed (SVD, CCF-aligned, maps, QC, DAQ, deck); NOT the `.bin`.
+
+## Allen-dir naming (GPU/LocaNMF)
+Cross-session-to-6/6 emits the CCF allen dir as **`allen_aligned_affine8v1`** (the
+standard name the GPU/LocaNMF, maps, and deck all expect) -- it CONTAINS the 6/6-CCF
+alignment. Do not use a custom name (e.g. xday6) on N: or the GPU won't find it.

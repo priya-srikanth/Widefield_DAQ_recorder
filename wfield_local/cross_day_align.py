@@ -221,7 +221,7 @@ def run_reference_native(cfg, out, func):
                 # this session (U + both-channel mean warped to ref CCF; atlas/mask
                 # copied from the reference's own Allen alignment).
                 ref_allen = Path(ref["results"]) / "allen_aligned_affine8v1"
-                ad = Path(s["results"]) / cfg.get("allen_dir_name", "allen_aligned_xday6")
+                ad = Path(s["results"]) / cfg.get("allen_dir_name", "allen_aligned_affine8v1")
                 ad.mkdir(parents=True, exist_ok=True)
                 np.save(ad / "U_atlas.npy", Ux)
                 fa = np.load(Path(s["results"]) / "frames_average.npy")  # (2,H,W) raw mean
