@@ -103,6 +103,8 @@ SESSIONS = [
          h5=f"{D}/20260608/PS93_20260608_195350.h5", regime="B", fmdir=None),
     dict(label="PS94_0608", mc=f"{L}/20260608/PS94_20260608_153651/motion_corrected",
          h5=f"{D}/20260608/PS94_20260608_153702.h5", regime="B", fmdir=None),
+    dict(label="PS95_0608", mc=f"{L}/20260608/PS95_20260608_180943/motion_corrected",
+         h5=f"{D}/20260608/PS95_20260608_180950.h5", regime="B", fmdir=None),
 ]
 
 
