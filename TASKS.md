@@ -19,6 +19,12 @@ these landmark JSONs (in each 6/6 session's `raw_widefield_data\`, on N:):
 Also recompute PS92 & PS93's 6/6 reference `allen_aligned_affine8v1` with their v2 landmarks
 so the reference session itself is consistent with what the other days are aligned to.
 
+## Redo scope: 6/5 onward only (6/4 and earlier NOT redone)
+Decision (2026-06-09): the sign-bug drift on 6/4 and earlier was negligible (<1.1 px), so
+those sessions are **not** re-motion-corrected. `_redo_motion_all.py` has a date floor
+(`date <= "20260604"` -> skip). Redo covers 6/5-6/8 (6/7-6/8 done via nightly fixed motion;
+6/6 + 6/5 via the redo batch). The cross-session_aligned deck likewise starts at 6/5.
+
 ## Motion-correction sign-bug remediation (in progress)
 wfield 0.4.2 doubled drift (sign error); fixed in `wfield_local/motion_correct_fixed.py`
 (see `MOTION_CORRECTION_SIGN_BUG.md`). Re-processing ALL prior sessions with the fix,
