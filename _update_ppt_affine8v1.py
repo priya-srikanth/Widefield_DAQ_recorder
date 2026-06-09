@@ -305,12 +305,17 @@ if os.path.exists(pb0608_sum) and pb0608_title not in present:
 present = {slide_title(s) for s in prs.slides}
 xint_png = r"C:\Github\Widefield_DAQ_recorder\_crossday_intensity_out\crossday_raw_intensity.png"
 xint_title = "Cross-day raw fluorescence intensity (per animal)"
-if os.path.exists(xint_png) and xint_title not in present:
-    content(xint_title,
-            "Brain-ROI median raw counts (415 + 470) per animal across days, from each "
-            "session's frames_average. CAVEAT: LED power is manually titrated day-to-day, so "
-            "a trend may reflect the LED setting, not photobleaching. No monotonic decline seen.",
-            xint_png, 0.4, 1.7, 12.5)
+xint_caption = ("Brain-ROI median raw counts (415 + 470) per animal across days, from each "
+                "session's frames_average. CAVEAT: LED power is manually titrated day-to-day, so "
+                "a trend may reflect the LED setting, not photobleaching. No monotonic decline seen.")
+if os.path.exists(xint_png):
+    _xint = {slide_title(s): s for s in prs.slides}.get(xint_title)
+    if _xint is not None:   # refresh the figure in place (latest days added)
+        for sh in [sh for sh in _xint.shapes if sh.shape_type == 13]:
+            sh._element.getparent().remove(sh._element)
+        _xint.shapes.add_picture(xint_png, Inches(0.4), Inches(1.7), width=Inches(12.5))
+    else:
+        content(xint_title, xint_caption, xint_png, 0.4, 1.7, 12.5)
 
 # ---- 4c) Cross-day vasculature alignment QC (idempotent) ----
 present = {slide_title(s) for s in prs.slides}
