@@ -40,14 +40,32 @@ def _args():
     return SimpleNamespace(source="locanmf", align="lick", baseline="none", pre_s=1.0, post_s=2.0, fs=FS, max_rt=2.0)
 
 
+def _rdm_from(X, y, mask=None):
+    pos = np.array(DISPLAY_ORDER)
+    sel = np.ones(len(y), bool) if mask is None else mask
+    P = np.vstack([X[sel & (y == p)].mean(0) if (sel & (y == p)).sum() >= 2 else np.full(X.shape[1], np.nan)
+                   for p in pos])
+    return 1.0 - np.corrcoef(P)
+
+
 def session_rdm(label):
     """6x6 representational dissimilarity matrix (1 - Pearson r between the 6 position activity patterns)."""
     s = next(x for x in SESSIONS if x["label"] == label)
+    X, y, _, _, _, _ = _trial_features(s, _args())
+    return _rdm_from(X, y)
+
+
+def _rdm_and_reliability(label):
+    """Full-data RDM + split-half reliability: split BLOCKS by parity, build an RDM from each half, and
+    Spearman-correlate them. That reliability is the per-session NOISE CEILING -- the maximum 2nd-order RSA
+    any other RDM (another session of the same animal) could reach given this session's estimation noise."""
+    s = next(x for x in SESSIONS if x["label"] == label)
     X, y, g, _, _, _ = _trial_features(s, _args())
-    pos = np.array(DISPLAY_ORDER)
-    P = np.vstack([X[y == p].mean(0) if (y == p).any() else np.full(X.shape[1], np.nan) for p in pos])
-    R = np.corrcoef(P)
-    return 1.0 - R
+    full = _rdm_from(X, y)
+    ub = np.unique(g); half = set(ub[::2].tolist())
+    mA = np.array([gi in half for gi in g]); mB = ~mA
+    rel = _spearman(_triu(_rdm_from(X, y, mA)), _triu(_rdm_from(X, y, mB)))
+    return full, rel
 
 
 def _triu(m):
@@ -69,17 +87,17 @@ def _spearman(a, b):
 def _collect(dates):
     labs = sorted([s["label"] for s in SESSIONS if dates is None or s["label"][-4:] in dates],
                   key=lambda l: (l[:4], l[-4:]))
-    rdms = {}
+    rdms, rels = {}, {}
     for l in labs:
         try:
-            rdms[l] = session_rdm(l)
+            rdms[l], rels[l] = _rdm_and_reliability(l)
         except Exception as ex:
             print(f"  {l} skip: {str(ex)[:50]}", flush=True)
-    return [l for l in labs if l in rdms], rdms
+    return [l for l in labs if l in rdms], rdms, rels
 
 
 def fig_rsa_sessions(out, dates=None, tag=""):
-    labs, rdms = _collect(dates)
+    labs, rdms, rels = _collect(dates)
     vecs = {l: _triu(rdms[l]) for l in labs}
     n = len(labs)
     S = np.full((n, n), np.nan)
@@ -88,8 +106,8 @@ def fig_rsa_sessions(out, dates=None, tag=""):
             S[i, j] = _spearman(vecs[labs[i]], vecs[labs[j]])
     animals = sorted({l[:4] for l in labs})
     aof = [l[:4] for l in labs]
-    # within- vs across-animal second-order RSA
-    wa, ac = {}, {}
+    # within- vs across-animal second-order RSA, and split-half noise ceiling per animal
+    wa, ac, nc = {}, {}, {}
     for a in animals:
         idx = [k for k in range(n) if aof[k] == a]
         oth = [k for k in range(n) if aof[k] != a]
@@ -97,6 +115,7 @@ def fig_rsa_sessions(out, dates=None, tag=""):
         apairs = [S[i, j] for i in idx for j in oth]
         wa[a] = np.nanmean(wpairs) if wpairs else np.nan
         ac[a] = np.nanmean(apairs) if apairs else np.nan
+        nc[a] = np.nanmean([rels[labs[k]] for k in idx])
     # animal-level RDM (mean of session RDMs) and animal x animal RSA
     ardm = {a: np.nanmean([rdms[l] for l in labs if l[:4] == a], axis=0) for a in animals}
     A = np.full((len(animals), len(animals)), np.nan)
@@ -119,10 +138,13 @@ def fig_rsa_sessions(out, dates=None, tag=""):
     ax = fig.add_subplot(1, 3, 2); x = np.arange(len(animals)); w = 0.38
     ax.bar(x - w / 2, [wa[a] for a in animals], w, label="within-animal", color="#2980b9")
     ax.bar(x + w / 2, [ac[a] for a in animals], w, label="across-animal", color="#c0392b")
+    for i, a in enumerate(animals):                       # split-half noise ceiling (grey caps)
+        ax.plot([i - w, i + w / 2 + w / 2], [nc[a], nc[a]], color="#555", ls="--", lw=1.2,
+                label="noise ceiling (split-half)" if i == 0 else None)
+        frac = wa[a] / nc[a] if nc[a] and np.isfinite(nc[a]) else np.nan
+        ax.text(i - w / 2, wa[a] + 0.02, f"{100*frac:.0f}%" if np.isfinite(frac) else "", ha="center", fontsize=7, color="#2980b9")
     ax.set_xticks(x); ax.set_xticklabels(animals); ax.set_ylim(0, 1); ax.set_ylabel("mean 2nd-order RSA (Spearman)")
-    ax.legend(fontsize=8); ax.set_title("Representational geometry:\nwithin- vs across-animal stability", fontsize=10)
-    for i, a in enumerate(animals):
-        ax.text(i, max(wa[a], ac[a]) + 0.02, f"{wa[a]-ac[a]:+.2f}", ha="center", fontsize=7)
+    ax.legend(fontsize=7); ax.set_title("Within- vs across-animal stability\n(% = within / noise ceiling)", fontsize=10)
     # (3) animal x animal RDM-RSA
     ax = fig.add_subplot(1, 3, 3)
     im = ax.imshow(A, cmap="viridis", vmin=np.nanpercentile(A, 5), vmax=1)
@@ -137,12 +159,14 @@ def fig_rsa_sessions(out, dates=None, tag=""):
     p = out / f"locanmf_rsa_sessions{('_' + tag) if tag else ''}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     print(f"RSA within vs across animal (Spearman of RDMs){(' [' + tag + ']') if tag else ''}:", flush=True)
     for a in animals:
-        print(f"  {a}: within={wa[a]:.2f}  across={ac[a]:.2f}  (within-across={wa[a]-ac[a]:+.2f})", flush=True)
+        frac = wa[a] / nc[a] if nc[a] else np.nan
+        print(f"  {a}: within={wa[a]:.2f} across={ac[a]:.2f} ceiling={nc[a]:.2f} "
+              f"within/ceiling={frac:.0%} (within-across={wa[a]-ac[a]:+.2f})", flush=True)
     return p
 
 
 def fig_rsa_rdms(out, dates=None, tag=""):
-    labs, rdms = _collect(dates)
+    labs, rdms, _ = _collect(dates)
     animals = sorted({l[:4] for l in labs})
     ardm = {a: np.nanmean([rdms[l] for l in labs if l[:4] == a], axis=0) for a in animals}
     grand = np.nanmean([rdms[l] for l in labs], axis=0)

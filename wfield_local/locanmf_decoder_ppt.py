@@ -262,6 +262,23 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "(6/1,6/4), not intrinsic. NB pairwise r understates consistency for flat high-recall profiles (PS95 "
               "r=0.30 but SD=0.04) -> trust SD there. Engagement-matched consecutive baselines => noise floor ~0.05.")
         pic(s, wac3, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
+    rsa = src / "locanmf_rsa_sessions.png"
+    if rsa.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "RSA — representational geometry of spout position (within vs across animals)",
+              "Per session a 6x6 RDM (1 - corr between the 6 position activity patterns); 2nd-order RSA = Spearman "
+              "between RDMs (basis-free, valid across sessions/animals). Within-animal RDM similarity > across-animal "
+              "for all 4 (stable individual geometry); % = within / split-half noise ceiling. PS93 is NOT the geometric "
+              "outlier (most similar to PS92) -> its deficit is the lateralized SSp asymmetry (F15), not a global "
+              "geometry change. PS94 most distinct.")
+        pic(s, rsa, left=Inches(0.15), top=Inches(1.7), width=Inches(13.0))
+    rsr = src / "locanmf_rsa_rdms.png"
+    if rsr.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "RSA — mean representational dissimilarity matrix per animal",
+              "How the 6 positions relate (dark = similar patterns, bright = distinct). PS93 flattest (positions less "
+              "differentiated, but rank-ordered like PS92); PS95 far_center the standout-distinct position (reproduces F7).")
+        pic(s, rsr, left=Inches(0.3), top=Inches(2.2), width=Inches(12.7))
 
     # takeaways
     s = prs.slides.add_slide(BLANK); title(s, "Takeaways")

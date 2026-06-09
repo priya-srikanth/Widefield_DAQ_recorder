@@ -146,6 +146,21 @@ structurally intact, so this is a *functional* reorganization question, not lesi
   with per-session + pooled-per-animal FEVE-by-region heatmaps over all 64 atlas regions). Component
   counts 6/7: PS92 126, PS93 102, PS94 93, PS95 129.
 
+- **F16. RSA — representational geometry of spout position (within vs across animals; `locanmf_rsa.py`).**
+  Per session a 6×6 RDM = 1 − corr between the 6 position activity patterns (first-lick 2 s); 2nd-order RSA
+  = Spearman between RDMs (basis-free → valid despite per-session LocaNMF component sets). **Within-animal
+  RDM similarity > across-animal for ALL four** (within 0.45–0.62 vs across 0.25–0.32) → a stable individual
+  representational geometry. Calibrated against a **split-half noise ceiling** (RDM reliability within a
+  session): within/ceiling = PS92 109 %, PS94 88 %, PS93 78 %, PS95 56 %. So for PS92/PS94 the geometry is
+  **as stable across days as within a single session** (the modest absolute RSA is estimation noise, not
+  drift); **PS95 shows genuine cross-day drift** (reliable RDM, ceiling 0.88, yet only 56 % realized);
+  PS93 intermediate. **PS93 is NOT the geometric outlier** — its mean RDM is most similar to PS92's (0.77);
+  **PS94 is the most distinct** animal (0.16–0.36). So PS93's deficit is the *lateralized* SSp-left≪right
+  asymmetry (F15/F15a), **dissociated** from the (preserved, PS92-like) global position geometry — a
+  hemisphere-resolved RDM is the natural next probe. PS93's RDM is flattest (positions least
+  differentiated); PS95 `far_center` the standout-distinct position (reproduces F7). Caveat: full-data
+  correlation RDM (ceiling calibrates the rest); across-animal RSA also reflects FOV/alignment differences.
+
 ## 4. When is LocaNMF actually helpful (the synthesis)
 - **Not** for region-level evoked responses / ROI summaries → that equals an Allen-ROI average
   (F5) with extra scale-ambiguity headaches; use ROIs/pixel maps there.
