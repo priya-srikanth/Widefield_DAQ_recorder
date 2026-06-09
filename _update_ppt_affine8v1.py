@@ -64,6 +64,14 @@ SESSIONS = [
      fr"{D}\20260607\PS94_20260607_140731\motion_corrected", "PS94_0607_affine8v1"),
     ("PS95 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
      fr"{D}\20260607\PS95_20260607_155000\motion_corrected", "PS95_0607_affine8v1"),
+    ("PS92 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260608\PS92_20260608_133759\motion_corrected", "PS92_0608_affine8v1"),
+    ("PS93 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260608\PS93_20260608_195203\motion_corrected", "PS93_0608_affine8v1"),
+    ("PS94 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260608\PS94_20260608_153651\motion_corrected", "PS94_0608_affine8v1"),
+    ("PS95 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
+     fr"{D}\20260608\PS95_20260608_180943\motion_corrected", "PS95_0608_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
@@ -273,6 +281,23 @@ if os.path.exists(pb0607_sum) and pb0607_title not in present:
     for an in ("PS92", "PS93", "PS94", "PS95"):
         per = os.path.join(pb0607_dir, f"photobleach_{an}_0607.png")
         pt = f"Photobleaching 2026-06-07: {an} per-channel trend"
+        if os.path.exists(per) and pt not in present:
+            content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
+
+# ---- 4a3b) 2026-06-08 photobleaching (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+pb0608_dir = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out_0608"
+pb0608_sum = os.path.join(pb0608_dir, "photobleach_SUMMARY.png")
+pb0608_title = "Photobleaching 2026-06-08 (4 sessions)"
+if os.path.exists(pb0608_sum) and pb0608_title not in present:
+    content(pb0608_title,
+            "415 isosbestic vs 470 functional ROI-median trends + per-session %drift. "
+            "470 stays within a few % (PS92 -4.8, PS93 +4.8, PS94 -0.9, PS95 -4.9); "
+            "larger 415 decline = violet-LED drift (removed by the 0.1 Hz hemo highpass).",
+            pb0608_sum, 0.15, 1.7, 12.9)
+    for an in ("PS92", "PS93", "PS94", "PS95"):
+        per = os.path.join(pb0608_dir, f"photobleach_{an}_0608.png")
+        pt = f"Photobleaching 2026-06-08: {an} per-channel trend"
         if os.path.exists(per) and pt not in present:
             content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
 
