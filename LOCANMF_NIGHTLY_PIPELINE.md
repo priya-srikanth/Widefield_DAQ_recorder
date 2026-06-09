@@ -60,7 +60,9 @@ temporal; encoder-vs-SVD validation.
   assessed comparable (6/5 first-lick 0.77 between 6/6 0.73 and 6/7 0.84; 6/5–6/7 SD 0.05); re-verify each
   run and exclude PS92 6/5 only if it becomes an outlier.
 - RSA: `python -m wfield_local.locanmf_rsa --output OUT` → session×session 2nd-order RSA (Spearman of 6×6
-  position RDMs) + within/across-animal stability vs split-half noise ceiling + animal×animal RDM similarity.
+  position RDMs) + within/across-animal stability vs split-half noise ceiling + animal×animal RDM
+  similarity, **and** hemisphere-resolved RDMs (left-hem vs right-hem position geometry, disattenuated
+  L-vs-R agreement; the PS93 lateralization probe).
 
 **2f. Deck + commit.** In `wfield_local/locanmf_decoder_ppt.py`: add `("<MMDD>","M/D")` to `DAYS`; bump the
 newest-day rolling/encoder refs to `<MMDD>`; bump the consistency-subset slide ref to `_0605-<MMDD>`.

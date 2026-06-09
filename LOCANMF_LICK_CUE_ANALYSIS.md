@@ -161,6 +161,18 @@ structurally intact, so this is a *functional* reorganization question, not lesi
   differentiated); PS95 `far_center` the standout-distinct position (reproduces F7). Caveat: full-data
   correlation RDM (ceiling calibrates the rest); across-animal RSA also reflects FOV/alignment differences.
 
+- **F17. Hemisphere-resolved RDM exposes PS93's lateralization that the pooled RDM misses
+  (`locanmf_rsa.fig_rsa_hemisphere`).** Building the 6×6 position RDM separately from left- vs right-
+  hemisphere LocaNMF components: the within-session **L-vs-R RDM agreement, disattenuated by each
+  hemisphere's split-half reliability, is PS93 0.44 — the lowest** (PS92 0.69, PS94 0.80, PS95 0.91). I.e.
+  PS93's two hemispheres encode position with **divergent geometry**. Crucially PS93's LEFT hemisphere is
+  **not** unreliable (split-half reliability 0.78, 2nd-highest) — so the right orofacial deficit
+  **reshapes** the contralateral (left) position geometry rather than abolishing left-hemisphere coding.
+  This is the lateralized signature the whole-cortex RDM (F16, pooled over hemispheres) is blind to, and it
+  agrees with the SSp-left≪right decoding asymmetry (F15/F15a). Caveats: n=3 PS93; disattenuation is
+  unstable when a hemisphere's reliability is low (PS92 right-hem 0.23); hemisphere = Allen region suffix;
+  "divergent geometry" doesn't yet localize WHICH position contrasts differ (next: per-cell RDM_L−RDM_R).
+
 ## 4. When is LocaNMF actually helpful (the synthesis)
 - **Not** for region-level evoked responses / ROI summaries → that equals an Allen-ROI average
   (F5) with extra scale-ambiguity headaches; use ROIs/pixel maps there.

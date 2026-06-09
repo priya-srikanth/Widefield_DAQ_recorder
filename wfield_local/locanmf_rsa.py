@@ -18,6 +18,8 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import glob
+import json
 from collections import defaultdict
 from pathlib import Path
 from types import SimpleNamespace
@@ -185,6 +187,138 @@ def fig_rsa_rdms(out, dates=None, tag=""):
     return p
 
 
+def _rel_within(Xh, y, g):
+    """Split-half (block-parity) RDM reliability within a column subset (one hemisphere)."""
+    ub = np.unique(g); half = set(ub[::2].tolist())
+    mA = np.array([gi in half for gi in g])
+    return _spearman(_triu(_rdm_from(Xh, y, mA)), _triu(_rdm_from(Xh, y, ~mA)))
+
+
+def _session_hemi(label):
+    """RDM_L, RDM_R (from left- vs right-hemisphere LocaNMF components), per-hemisphere split-half
+    reliability, and component counts. Hemisphere from the Allen region name suffix (_left/_right)."""
+    s = next(x for x in SESSIONS if x["label"] == label)
+    X, y, g, _, _, reg = _trial_features(s, _args())
+    names = {int(k): v for k, v in json.load(open(glob.glob(
+        f"{s['mc']}/wfield_local_results/allen_aligned_affine8v1/allen_area_names.json")[0]))}
+    rn = np.array([names.get(int(reg[i]), "?") for i in range(X.shape[1])])
+    L = np.array([n.endswith("_left") for n in rn]); R = np.array([n.endswith("_right") for n in rn])
+    out = {"nL": int(L.sum()), "nR": int(R.sum())}
+    out["L"] = _rdm_from(X[:, L], y) if L.sum() >= 3 else None
+    out["R"] = _rdm_from(X[:, R], y) if R.sum() >= 3 else None
+    out["relL"] = _rel_within(X[:, L], y, g) if L.sum() >= 3 else np.nan
+    out["relR"] = _rel_within(X[:, R], y, g) if R.sum() >= 3 else np.nan
+    out["LR"] = _spearman(_triu(out["L"]), _triu(out["R"])) if out["L"] is not None and out["R"] is not None else np.nan
+    # disattenuated L-vs-R agreement: divide by sqrt(relL*relR) to remove each hemisphere's estimation
+    # noise -> the true between-hemisphere geometry similarity (~1 = hemispheres agree). Unstable (NaN) when
+    # either reliability is too low to correct against.
+    rl, rr = out["relL"], out["relR"]
+    out["LRnorm"] = (out["LR"] / np.sqrt(rl * rr)) if (np.isfinite(out["LR"]) and rl > 0.1 and rr > 0.1) else np.nan
+    return out
+
+
+def _collect_hemi(dates):
+    labs = sorted([s["label"] for s in SESSIONS if dates is None or s["label"][-4:] in dates],
+                  key=lambda l: (l[:4], l[-4:]))
+    H = {}
+    for l in labs:
+        try:
+            H[l] = _session_hemi(l)
+        except Exception as ex:
+            print(f"  {l} hemi skip: {str(ex)[:50]}", flush=True)
+    return [l for l in labs if l in H], H
+
+
+def fig_rsa_hemisphere(out, dates=None, tag=""):
+    """Hemisphere-resolved position RDMs. (1) per-animal mean RDM_L (top) and RDM_R (bottom). (2) summary:
+    within-session L-vs-R RDM agreement per animal (do the two hemispheres encode position the same way?),
+    per-hemisphere split-half reliability, and animal x animal RDM similarity computed WITHIN the left and
+    WITHIN the right hemisphere separately (is PS93's LEFT hemisphere -- contralateral to its right
+    orofacial deficit -- an outlier where its right is not?)."""
+    labs, H = _collect_hemi(dates)
+    animals = sorted({l[:4] for l in labs})
+
+    def amean(a, key):
+        vals = [H[l][key] for l in labs if l[:4] == a and H[l].get(key) is not None and np.ndim(H[l][key]) == 2]
+        return np.nanmean(vals, axis=0) if vals else np.full((6, 6), np.nan)
+    rdmL = {a: amean(a, "L") for a in animals}; rdmR = {a: amean(a, "R") for a in animals}
+
+    # ---- figure 1: per-animal hemisphere RDMs ----
+    cols = animals + ["GRAND"]
+    gl = np.nanmean([rdmL[a] for a in animals], axis=0); gr = np.nanmean([rdmR[a] for a in animals], axis=0)
+    allv = [m for M in list(rdmL.values()) + list(rdmR.values()) + [gl, gr] for m in _triu(M) if np.isfinite(m)]
+    vmax = np.nanpercentile(allv, 98)
+    fig, axes = plt.subplots(2, len(cols), figsize=(2.7 * len(cols), 5.6))
+    for j, name in enumerate(cols):
+        ML = gl if name == "GRAND" else rdmL[name]; MR = gr if name == "GRAND" else rdmR[name]
+        for row, M, hh in [(0, ML, "LEFT hem"), (1, MR, "RIGHT hem")]:
+            ax = axes[row][j]; im = ax.imshow(M, cmap="magma", vmin=0, vmax=vmax)
+            ax.set_xticks(range(6)); ax.set_xticklabels(POSN if row == 1 else [], rotation=90, fontsize=5.5)
+            ax.set_yticks(range(6)); ax.set_yticklabels(POSN if j == 0 else [], fontsize=5.5)
+            if row == 0:
+                ax.set_title(name, fontsize=10)
+            if j == 0:
+                ax.set_ylabel(hh, fontsize=9)
+    fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.6, label="dissimilarity (1 - r)")
+    fig.suptitle(f"Hemisphere-resolved position RDMs per animal{(' [' + tag + ']') if tag else ''} "
+                 "(top = left-hem components, bottom = right-hem)", fontsize=12)
+    p1 = out / f"locanmf_rsa_hemisphere_rdms{('_' + tag) if tag else ''}.png"; fig.savefig(p1, dpi=130); plt.close(fig)
+
+    # ---- figure 2: summary ----
+    def sess_vals(a, key):
+        return [H[l][key] for l in labs if l[:4] == a and np.isfinite(H[l].get(key, np.nan))]
+    fig = plt.figure(figsize=(16, 8)); x = np.arange(len(animals)); w = 0.38
+    # (A) within-session L-vs-R RDM agreement
+    ax = fig.add_subplot(2, 2, 1)
+    for i, a in enumerate(animals):
+        v = sess_vals(a, "LR")
+        ax.bar(i, np.nanmean(v) if v else np.nan, 0.6, color=ANIMAL_COLOR.get(a, "k"), alpha=0.85)
+        if v:
+            ax.scatter([i] * len(v), v, s=16, color="k", alpha=0.5, zorder=3)
+        vn = sess_vals(a, "LRnorm")
+        if vn:
+            ax.text(i, (np.nanmean(v) if v else 0) + 0.04, f"adj\n{np.nanmean(vn):.2f}", ha="center",
+                    fontsize=8, fontweight="bold", color="#b30000")
+    ax.set_xticks(x); ax.set_xticklabels(animals); ax.set_ylim(0, 1.15)
+    ax.set_ylabel("L-vs-R RDM Spearman (within session)")
+    ax.set_title("Do the two hemispheres encode position the SAME way?\n"
+                 "bars = raw; red 'adj' = disattenuated by reliability (PS93 lowest = hemispheres diverge)", fontsize=9)
+    # (B) per-hemisphere split-half reliability
+    ax = fig.add_subplot(2, 2, 2)
+    ax.bar(x - w / 2, [np.nanmean(sess_vals(a, "relL")) for a in animals], w, label="LEFT hem", color="#8e44ad")
+    ax.bar(x + w / 2, [np.nanmean(sess_vals(a, "relR")) for a in animals], w, label="RIGHT hem", color="#e67e22")
+    ax.set_xticks(x); ax.set_xticklabels(animals); ax.set_ylim(0, 1)
+    ax.set_ylabel("split-half RDM reliability"); ax.legend(fontsize=8)
+    ax.set_title("Per-hemisphere RDM reliability\n(low LEFT for PS93 = degraded contralateral geometry?)", fontsize=10)
+    # (C,D) animal x animal RDM similarity within LEFT and within RIGHT hemisphere
+    for sp, key, hh in [(3, "L", "LEFT"), (4, "R", "RIGHT")]:
+        ax = fig.add_subplot(2, 2, sp)
+        A = np.full((len(animals), len(animals)), np.nan)
+        for i, ai in enumerate(animals):
+            for jj, aj in enumerate(animals):
+                A[i, jj] = _spearman(_triu(rdmL[ai] if key == "L" else rdmR[ai]),
+                                     _triu(rdmL[aj] if key == "L" else rdmR[aj]))
+        im = ax.imshow(A, cmap="viridis", vmin=np.nanpercentile(A, 5), vmax=1)
+        ax.set_xticks(range(len(animals))); ax.set_xticklabels(animals); ax.set_yticks(range(len(animals))); ax.set_yticklabels(animals)
+        for i in range(len(animals)):
+            for jj in range(len(animals)):
+                ax.text(jj, i, f"{A[i,jj]:.2f}", ha="center", va="center", fontsize=8,
+                        color="white" if A[i, jj] < 0.6 else "black")
+        fig.colorbar(im, ax=ax, shrink=0.8)
+        ax.set_title(f"Animal x animal RDM similarity -- {hh} hemisphere", fontsize=10)
+    fig.suptitle(f"Hemisphere-resolved RSA{(' [' + tag + ']') if tag else ''} "
+                 "(PS93 = right orofacial deficit -> probe its LEFT/contralateral hemisphere)", fontsize=12)
+    fig.tight_layout(); p2 = out / f"locanmf_rsa_hemisphere_summary{('_' + tag) if tag else ''}.png"; fig.savefig(p2, dpi=130); plt.close(fig)
+
+    print(f"Hemisphere-resolved RSA{(' [' + tag + ']') if tag else ''} (per animal, mean over sessions):", flush=True)
+    for a in animals:
+        print(f"  {a}: L-vs-R={np.nanmean(sess_vals(a,'LR')):.2f} (adj {np.nanmean(sess_vals(a,'LRnorm')):.2f})  "
+              f"relL={np.nanmean(sess_vals(a,'relL')):.2f} relR={np.nanmean(sess_vals(a,'relR')):.2f}  "
+              f"nL/nR~{int(np.mean([H[l]['nL'] for l in labs if l[:4]==a]))}/"
+              f"{int(np.mean([H[l]['nR'] for l in labs if l[:4]==a]))}", flush=True)
+    return p1, p2
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
@@ -194,6 +328,8 @@ def main() -> int:
     dates = set(args.dates.split(",")) if args.dates else None
     print("wrote", fig_rsa_sessions(args.output, dates, args.tag).name, flush=True)
     print("wrote", fig_rsa_rdms(args.output, dates, args.tag).name, flush=True)
+    for nm in fig_rsa_hemisphere(args.output, dates, args.tag):
+        print("wrote", nm.name, flush=True)
     return 0
 
 

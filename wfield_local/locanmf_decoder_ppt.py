@@ -279,6 +279,21 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
               "How the 6 positions relate (dark = similar patterns, bright = distinct). PS93 flattest (positions less "
               "differentiated, but rank-ordered like PS92); PS95 far_center the standout-distinct position (reproduces F7).")
         pic(s, rsr, left=Inches(0.3), top=Inches(2.2), width=Inches(12.7))
+    hsum = src / "locanmf_rsa_hemisphere_summary.png"
+    if hsum.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "HEMISPHERE-RESOLVED RDM — PS93's two hemispheres encode position differently",
+              "Separate position RDM from left- vs right-hemisphere components. Disattenuated L-vs-R agreement "
+              "(corrected for each hemisphere's reliability): PS93 0.44 (lowest) vs PS92 0.69 / PS94 0.80 / PS95 0.91. "
+              "PS93's LEFT hem is NOT degraded (reliability 0.78, high) -> the deficit RESHAPES the contralateral "
+              "geometry rather than abolishing it. This is the lateralization the whole-cortex RDM (pooled) misses.")
+        pic(s, hsum, left=Inches(0.2), top=Inches(1.6), width=Inches(13.0))
+    hrdm = src / "locanmf_rsa_hemisphere_rdms.png"
+    if hrdm.exists():
+        s = prs.slides.add_slide(BLANK)
+        title(s, "HEMISPHERE-RESOLVED RDM — per-animal left-hem (top) vs right-hem (bottom) geometry",
+              "The 6x6 position geometry within each hemisphere, per animal. Compare PS93's left vs right rows.")
+        pic(s, hrdm, left=Inches(0.2), top=Inches(2.0), width=Inches(13.0))
 
     # takeaways
     s = prs.slides.add_slide(BLANK); title(s, "Takeaways")
