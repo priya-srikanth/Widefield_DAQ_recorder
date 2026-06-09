@@ -22,13 +22,16 @@ for date in sorted(os.listdir(NL)):
         med415=float(np.median(favg[0][brain])); med470=float(np.median(favg[1][brain]))
         rows.append((m.group(1),date,med415,med470))
 animals=sorted({r[0] for r in rows})
+alldates=sorted({r[1] for r in rows})            # chronological x-axis (fixed order)
+xpos={d:i for i,d in enumerate(alldates)}
 fig,ax=plt.subplots(1,2,figsize=(15,5.5))
 for ci,(nm,idx) in enumerate([("415",2),("470",3)]):
     for a in animals:
         rr=sorted([r for r in rows if r[0]==a],key=lambda r:r[1])
-        x=[r[1][4:] for r in rr]; y=[r[idx] for r in rr]
+        x=[xpos[r[1]] for r in rr]; y=[r[idx] for r in rr]   # integer positions -> true date order
         ax[ci].plot(x,y,"-o",label=a)
-    ax[ci].set_title(f"{nm} nm raw brain-ROI median across days"); ax[ci].set_xlabel("date (MMDD)"); ax[ci].set_ylabel("raw counts"); ax[ci].legend(); ax[ci].tick_params(axis="x",rotation=45)
+    ax[ci].set_xticks(range(len(alldates))); ax[ci].set_xticklabels([d[4:6]+"/"+d[6:] for d in alldates])
+    ax[ci].set_title(f"{nm} nm raw brain-ROI median across days"); ax[ci].set_xlabel("date (MM/DD)"); ax[ci].set_ylabel("raw counts"); ax[ci].legend(); ax[ci].tick_params(axis="x",rotation=45)
 fig.suptitle("Cross-day RAW fluorescence intensity (frames_average brain-ROI median)\n"
              "CAVEAT: LED power is manually titrated day-to-day -> a trend may reflect LED setting, not bleaching", fontsize=12)
 plt.tight_layout(); fp=os.path.join(OUT,"crossday_raw_intensity.png"); plt.savefig(fp,dpi=130); plt.close(fig)

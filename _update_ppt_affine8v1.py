@@ -213,18 +213,18 @@ for title, mc, lab in qc_sessions:
                 qcpng, 0.15, 1.35, 12.9)
         qc_added.append(title)
 
-# ---- 4) Photobleaching / LED-drift summary (idempotent) ----
-present = {slide_title(s) for s in prs.slides}
-pb_png = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out\photobleach_SUMMARY.png"
-pb_title = "Photobleaching / LED drift across sessions"
-pb_added = False
-if os.path.exists(pb_png) and pb_title not in present:
-    content(pb_title,
-            "415 isosbestic declines ~9-16%/session while 470 functional stays +/-2-3% -> consistent with "
-            "violet-LED drift, not GCaMP bleaching (true bleaching would hit 470 hardest). The 0.1 Hz "
-            "hemo-correction highpass already removes this slow drift.",
-            pb_png, 0.15, 1.7, 12.9)
-    pb_added = True
+# ---- 4) Remove the stale "LED drift across sessions" slide (6/1-6/3 only;
+#         superseded by the per-day photobleach slides + the cross-day intensity slide). ----
+pb_removed = []
+_stale_title = "Photobleaching / LED drift across sessions"
+_sldIdLst = prs.slides._sldIdLst
+while True:
+    _ids = list(_sldIdLst); _hit = False
+    for _idx, _sl in enumerate(prs.slides):
+        if slide_title(_sl) == _stale_title:
+            _sldIdLst.remove(_ids[_idx]); pb_removed.append(_stale_title); _hit = True; break
+    if not _hit:
+        break
 
 # ---- 4a) 2026-06-05 photobleaching: continuous vs trial-triggered (idempotent) ----
 present = {slide_title(s) for s in prs.slides}
@@ -383,5 +383,5 @@ for el, t in zip(children, titles):
 
 prs.save(DST)
 print(f"swapped {swapped} map pictures; appended sections: {added}; QC slides: {qc_added}; "
-      f"photobleach: {pb_added}; quiet-lick: {ql_added}; moved-to-end: {moved}; slides now {len(prs.slides)}")
+      f"removed-stale: {pb_removed}; quiet-lick: {ql_added}; moved-to-end: {moved}; slides now {len(prs.slides)}")
 print(f"backup at {DST}.bak")
