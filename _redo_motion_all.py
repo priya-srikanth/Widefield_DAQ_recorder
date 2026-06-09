@@ -160,6 +160,8 @@ def main():
     only = sys.argv[1:]  # optionally restrict to given session dir names
     state = _state()
     for date, sess, animal in discover():
+        if date <= "20260604":   # 6/4 and earlier: negligible drift (<1.1px) -> no redo (user decision)
+            continue
         if sess in SKIP:
             continue
         if only and sess not in only:
