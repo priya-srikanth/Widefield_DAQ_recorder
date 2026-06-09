@@ -1,23 +1,11 @@
 # Ongoing tasks & decisions (widefield pipeline)
 
-## Standing daily workflow (per recording day)
-1. DAQ recorder `.h5` -> `N:\MICROSCOPE\Priya\Widefield\DAQ_recorder_output\<date>\`.
-2. **Fixed** motion correction (`run_wfield_motion` -> `wfield_local/motion_correct_fixed.py`)
-   + SVD/hemo (`run_wfield_local`, k=100, fc=1, hp0.1/lp14) per session. relabel rescue.
-3. **Alignment policy (NEW, 2026-06-07):** do **cross-session registration to that animal's
-   2026-06-06 session** (reference-native, FFT phase-correlation) and use the **6/6
-   session's Allen CCF alignment for every session from here on out** — no new per-session
-   landmark placement. The 6/6 landmark fit is the single CCF bridge per animal.
-4. Copy to MICROSCOPE (N:): non-bin outputs (SVD, Allen/CCF-aligned U+atlas+mask, motion
-   summary/shifts, cleanpairs frame_map/summary), camlogs, any landmark JSONs.
-   **Prioritize LocaNMF inputs** (SVTcorr + the CCF-aligned U_atlas/atlas/mask) so the GPU
-   can start per session as they land.
-5. Photobleaching (per-session 415/470 trend) + motion-correction QC -> deck.
-   Also track **cross-day raw fluorescence intensity** (caveat: LED power is manually
-   titrated day to day, so a trend may reflect LED setting, not bleaching).
-6. Cue (2 s post / 2 s pre delta) + lick (150 ms, +/- quiet-period) maps -> deck.
-7. Raw `.dat` + corrected `.bin` -> M: standby (`M:\Widefield\labcams\<date>\<session>\`).
-8. **Do NOT delete anything on E: until checked in** that copies are verified.
+## Standing nightly pipeline
+The full per-night runbook (steps, scripts, params, conventions) lives in
+**`NIGHTLY_PIPELINE.md`** -- that is the source of truth. Summary: DAQ->N; fixed motion +
+SVD; cross-register each session to that animal's 2026-06-06 session and apply 6/6's Allen
+CCF (emit `allen_aligned_affine8v1`, no new landmarks); LocaNMF inputs->N first; cue/lick
+maps; photobleaching + cross-day intensity; deck; raw+bin->M. Don't delete E: until checked in.
 
 Deck: `N:\MICROSCOPE\Priya\Widefield\labcams\PS92_94_95_affine8v1.pptx`.
 
