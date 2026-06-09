@@ -34,9 +34,17 @@ labcams folder name, `YYYYMMDD`. Sessions are `PSxx_<DATE>_<hhmmss>`. Default di
    {6/6 (results+landmarks on N), <DATE> (results on E)}. Emits
    `wfield_local_results\allen_aligned_affine8v1\` (warped U + both-channel mean to 6/6 CCF +
    6/6 atlas/mask). Target NCC ~0.99. (See the `_xday_PSxx_<DATE>.json` configs.)
-4. **LocaNMF inputs -> N: FIRST** (prioritized): each session's `wfield_local_results\`
-   (SVTcorr + `allen_aligned_affine8v1` U_atlas/atlas/mask). GPU runs with
-   `--allen-dir ...\allen_aligned_affine8v1`, SVTcorr in the parent dir.
+4. **LocaNMF inputs -> N: FIRST** (prioritized). The GPU needs ALL of:
+   - `wfield_local_results\SVTcorr.npy`
+   - `wfield_local_results\allen_aligned_affine8v1\` (U_atlas/atlas/mask)
+   - the cleanpairs **frame_map** + summary, which live in the session's `motion_corrected\`
+     (NOT in `wfield_local_results\`): `*_cleanpairs_frame_map.npz` + `*_cleanpairs_summary.json`
+     -- maps SVT frames <-> physical/DAQ frames so LocaNMF traces align to behavior.
+   - DAQ `.h5` (already copied in step 1).
+   GPU runs with `--allen-dir ...\allen_aligned_affine8v1`, SVTcorr in the parent dir.
+   NOTE: pushing only `wfield_local_results\` MISSES the frame_map -- push the
+   `motion_corrected\*cleanpairs_frame_map.npz`+summary too (the step-8 archive copies them
+   later, but the GPU needs them with the prioritized push, before archive).
 5. **Maps + QC** -- `_maps_<DATE>_run.py` (template: `_maps_0608_run.py`), allen dir =
    `allen_aligned_affine8v1`: cue (`--pre-s 2.0 --post-s 2.0`, shared-scale + contrasts),
    lick (`--post-s 0.15`, contrasts, cue-vs-lick), quiet + quiet-normalized lick, motion QC.
