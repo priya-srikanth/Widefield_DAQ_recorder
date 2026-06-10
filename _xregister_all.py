@@ -21,7 +21,7 @@ DAYS = {
 LM      = {"PS92":"v2","PS93":"v2","PS94":"v1","PS95":"v1"}
 REALIGN = {"PS92":["0605","0607","0608"],"PS93":["0605","0607","0608"],"PS94":["0605"],"PS95":["0605"]}
 
-def results(an, day): return f"{NL}/20260{day}/{DAYS[an][day]}/motion_corrected/wfield_local_results".replace("\\","/")
+def results(an, day): return f"{NL}/2026{day}/{DAYS[an][day]}/motion_corrected/wfield_local_results".replace("\\","/")
 def landmarks(an):
     return f"{NL}/20260606/{DAYS[an]['0606']}/raw_widefield_data/dorsal_cortex_landmarks_{LM[an]}.json".replace("\\","/")
 
