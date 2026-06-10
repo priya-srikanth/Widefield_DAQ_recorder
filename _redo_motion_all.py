@@ -81,8 +81,9 @@ def _copy_outputs(mc, date, sess):
             if f.startswith("motioncorrect_") and f.endswith(".bin"):
                 d = os.path.join(m_mc, rel, f) if rel != "." else os.path.join(m_mc, f)
                 os.makedirs(os.path.dirname(d), exist_ok=True)
-                if not (os.path.exists(d) and os.path.getsize(d) == os.path.getsize(s)):
-                    shutil.copy2(s, d)
+                # ALWAYS overwrite: a re-corrected bin is the SAME SIZE as the buggy one,
+                # so a size-check would wrongly skip and leave the buggy bin on standby.
+                shutil.copy2(s, d)
                 mbin += 1
             else:
                 d = os.path.join(n_mc, rel, f) if rel != "." else os.path.join(n_mc, f)
