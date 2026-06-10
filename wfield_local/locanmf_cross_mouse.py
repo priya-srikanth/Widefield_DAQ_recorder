@@ -92,9 +92,11 @@ def per_session(label):
                 Rrecall=np.nanmean([recall[DISPLAY_ORDER.index(c)] for c in RSPOUT]))
 
 
-def fig_cross_mouse(out):
+def fig_cross_mouse(out, dates=None, tag=None):
     by_mouse = defaultdict(list)
     for s in SESSIONS:
+        if dates is not None and s["label"][-4:] not in dates:
+            continue
         by_mouse[s["label"][:4]].append(s["label"])
     mice = sorted(by_mouse)
     M = {}
@@ -171,8 +173,11 @@ def fig_cross_mouse(out):
     ax.axhline(0, color="k", lw=0.6); ax.set_xticks(x); ax.set_xticklabels(mice); ax.set_ylabel("asymmetry (L - R)")
     ax.legend(fontsize=7); ax.set_title("L/R asymmetry indices, mean +- SEM + sessions (PS93 = right orofacial deficit)")
     nsess = {m: len(M[m]) for m in mice}
-    fig.suptitle(f"Cross-mouse cortical representation of spout position (all sessions; n/mouse={nsess})", fontsize=13)
-    fig.tight_layout(); p = out / "locanmf_cross_mouse_comparison.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    scope = tag if tag else "all sessions"
+    fig.suptitle(f"Cross-mouse cortical representation of spout position ({scope}; n/mouse={nsess})", fontsize=13)
+    fig.tight_layout()
+    p = out / f"locanmf_cross_mouse_comparison{('_' + tag) if tag else ''}.png"
+    fig.savefig(p, dpi=130); plt.close(fig)
     for m in mice:
         print(f"  {m}: acc={agg(m,'acc'):.2f} Lrec={agg(m,'Lrecall'):.2f} Rrec={agg(m,'Rrecall'):.2f} "
               f"SSpL={agg(m,'ssp_left'):.2f} SSpR={agg(m,'ssp_right'):.2f}", flush=True)
@@ -249,9 +254,13 @@ def fig_within_animal_consistency(out, dates=None, tag=None):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
+    ap.add_argument("--dates", default="", help="comma MMDD subset (default all); e.g. 0605,0606,0607,0608")
+    ap.add_argument("--tag", default="", help="filename/scope tag, e.g. 0605-0608")
     args = ap.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
-    print("wrote", fig_cross_mouse(args.output).name, flush=True)
-    print("wrote", fig_within_animal_consistency(args.output).name, flush=True)
+    dates = set(args.dates.split(",")) if args.dates else None
+    tag = args.tag or None
+    print("wrote", fig_cross_mouse(args.output, dates, tag).name, flush=True)
+    print("wrote", fig_within_animal_consistency(args.output, dates, tag).name, flush=True)
     return 0
 
 

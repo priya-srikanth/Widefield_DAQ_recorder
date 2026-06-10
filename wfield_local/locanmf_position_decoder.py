@@ -111,6 +111,35 @@ def _trial_features(s, args):
     return np.array(X), np.array(y), np.array(g), np.array(Xn), np.array(yn), feat_reg
 
 
+def _save_session_fig(label, cmn, sm, labs, args, tag):
+    """One compact (confusion | recall) figure for a single session, for the animal-first deck."""
+    fig, (axc, axr) = plt.subplots(1, 2, figsize=(8.4, 3.8))
+    if cmn is not None:
+        im = axc.imshow(cmn, vmin=0, vmax=1, cmap="magma")
+        axc.set_xticks(range(6)); axc.set_xticklabels(labs, rotation=45, ha="right", fontsize=7)
+        axc.set_yticks(range(6)); axc.set_yticklabels(labs, fontsize=7)
+        axc.set_xlabel("predicted"); axc.set_ylabel("true")
+        fig.colorbar(im, ax=axc, shrink=0.75)
+    axc.set_title(f"{label}  {args.align} 0-{args.post_s:g}s\nacc={sm['acc']['all']:.2f} "
+                  f"SSp={sm['acc']['SSp']:.2f} MO={sm['acc']['MO']:.2f} (chance .17)", fontsize=9)
+    x = np.arange(6); nl_ok = args.align in ("cue", "precue") and not np.isnan(sm["acc_nolick"]["all"])
+    w = 0.38 if nl_ok else 0.6
+    axr.bar(x - (w / 2 if nl_ok else 0), sm["recall_by_position"].get("all", [np.nan] * 6), w,
+            color="tab:blue", label=f"engaged ({args.cv}-CV)")
+    if nl_ok:
+        axr.bar(x + w / 2, sm["recall_nolick_by_position"].get("all", [np.nan] * 6), w,
+                color="tab:red", label=f"no-lick (n={sm['n_nolick']})")
+    axr.axhline(1 / 6, color="grey", ls="--", lw=0.8, label="chance")
+    axr.set_xticks(x); axr.set_xticklabels(labs, rotation=45, ha="right", fontsize=7); axr.set_ylim(0, 1)
+    nls = f"  no-lick={sm['acc_nolick']['all']:.2f}" if nl_ok else ""
+    axr.set_title(f"per-position recall  eng={sm['acc']['all']:.2f}{nls}", fontsize=9)
+    axr.set_ylabel("recall"); axr.legend(fontsize=7)
+    fig.tight_layout()
+    p = args.output / f"locanmf_position_session_{label}_{tag}.png"
+    fig.savefig(p, dpi=130); plt.close(fig)
+    print("  wrote", p.name, flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--date", default="0603")
@@ -124,6 +153,9 @@ def main() -> int:
     ap.add_argument("--post-s", type=float, default=2.0, help="feature window after the alignment event "
                     "(2.0 = empirical optimum; spans the lick bout. >~2.5s dilutes the transient, see window sweep)")
     ap.add_argument("--max-rt", type=float, default=2.0)
+    ap.add_argument("--per-session", action="store_true",
+                    help="also write one compact confusion+recall figure per session "
+                         "(locanmf_position_session_{label}_{tag}.png) for the animal-first deck")
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     sess = [s for s in SESSIONS if s["label"].endswith(args.date)]
@@ -170,6 +202,7 @@ def main() -> int:
                                "recall_by_position": recall, "n_per_position": npos,
                                "n_nolick": int(Xnl.shape[0]), "acc_nolick": acc_nl,
                                "recall_nolick_by_position": recall_nl,
+                               "confusion_all": cmn.tolist() if cmn is not None else None,
                                "source": args.source, "align": args.align}
         nlstr = (f" | NO-LICK(n={Xnl.shape[0]}) " + "  ".join(f"{g}={a:.2f}" for g, a in acc_nl.items())) if nl_ok \
             else f" | no-lick n={Xnl.shape[0]} (skipped: needs --align cue)"
@@ -182,6 +215,8 @@ def main() -> int:
         ax.set_xlabel("predicted"); ax.set_ylabel("true")
         ax.set_title(f"{s['label']}  acc={accs['all']:.2f} (chance .17)\nSSp={accs['SSp']:.2f} MO={accs['MO']:.2f}", fontsize=9)
         fig.colorbar(im, ax=ax, shrink=0.7)
+        if args.per_session:
+            _save_session_fig(s["label"], cmn, summary[s["label"]], labs, args, tag=f"{args.source}_{args.align}_base-{args.baseline}_cv-{args.cv}")
     fig.suptitle(f"Spout-position decoding [{args.source}, {args.align}-aligned 0-{args.post_s:g}s, "
                  f"baseline={args.baseline}, {args.cv}-CV, engaged], {args.date}", fontsize=12)
     fig.tight_layout()

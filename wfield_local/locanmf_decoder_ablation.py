@@ -119,8 +119,13 @@ def fig_grouped_ablation(labels, out, tag):
         ax.set_xticks(range(len(labs))); ax.set_xticklabels(labs, rotation=55, ha="right", fontsize=8)
         ax.set_ylabel("accuracy drop (full - ablated)")
         ax.set_title(f"{label} full={full:.2f}\nleave-ONE (red/blue) vs leave-TWO (purple=bilateral, green=hemi, orange=crossed)", fontsize=9)
-    fig.suptitle("Unilateral SENSORY/MOTOR ablation: leave-one vs leave-two-out (necessity hidden by redundancy)", fontsize=12)
-    fig.tight_layout(); p = out / "locanmf_ablation_grouped_unilateral.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    ttl = f" ({tag})" if tag and not tag[:2].isdigit() else ""
+    fig.suptitle("Unilateral SENSORY/MOTOR ablation: leave-one vs leave-two-out (necessity hidden by redundancy)" + ttl, fontsize=12)
+    fig.tight_layout()
+    # tag with a non-date label (e.g. animal) suffixes the filename; the per-date all-animals call
+    # passes a date (or "") and keeps the original name the existing deck reads.
+    suffix = ("_" + tag) if (tag and not tag[:2].isdigit()) else ""
+    p = out / f"locanmf_ablation_grouped_unilateral{suffix}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
 

@@ -447,6 +447,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--date", default="0605")
+    ap.add_argument("--pool-dates", default="", help="comma MMDD subset for the pooled FEVE figures "
+                    "(default empty = ALL sessions; e.g. 0605,0606,0607,0608 for the 6/5-onward deck)")
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     for s in [x for x in SESSIONS if x["label"].endswith(args.date)]:
@@ -464,8 +466,10 @@ def main() -> int:
             print("wrote", f(labs, args.output, args.date).name, flush=True)
         except Exception as ex:
             print(f"{f.__name__}: FAILED {type(ex).__name__}: {str(ex)[:80]}", flush=True)
-    # FEVE by region — pooled-per-animal and per-session, over ALL sessions (date-independent)
-    all_labs = [x["label"] for x in SESSIONS]
+    # FEVE by region — pooled-per-animal and per-session. Default ALL sessions; --pool-dates restricts
+    # (the 6/5-onward deck pools only 6/5-6/8, which share each animal's consistent 6/6-referenced alignment).
+    pool = set(args.pool_dates.split(",")) if args.pool_dates else None
+    all_labs = [x["label"] for x in SESSIONS if pool is None or x["label"][-4:] in pool]
     res = {}
     for lab in all_labs:
         try:

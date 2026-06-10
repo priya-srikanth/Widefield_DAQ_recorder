@@ -82,7 +82,7 @@ def _region_group(rn):
 
 
 # --------------------------------------------------------------------------- figures
-def fig_weights_by_region(labels, out):
+def fig_weights_by_region(labels, out, tag=""):
     fig, axes = plt.subplots(1, len(labels), figsize=(5.7 * len(labels), 5.2), squeeze=False)
     for ax, lab in zip(axes[0], labels):
         s = _sess(lab); names = _names(s)
@@ -106,7 +106,9 @@ def fig_weights_by_region(labels, out):
     axes[0][0].set_ylabel("intended spout position")
     fig.suptitle("Per-position decoder weight by Allen region (top-12 + MOp/MOs L/R) [no-baseline, first-lick 2s]\n"
                  "Contralateral SSp: left spouts->right-hemi SSp, right->left", fontsize=11)
-    fig.tight_layout(); p = out / "locanmf_decoder_weights_by_region.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    fig.tight_layout()
+    p = out / f"locanmf_decoder_weights_by_region{('_' + tag) if tag else ''}.png"
+    fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
 
@@ -338,6 +340,32 @@ def fig_rolling_cue(labels, out, tag):
     ax.set_ylim(max(0.0, min([1 / 6] + allv) - 0.05), min(1.0, max([1 / 6] + allv) + 0.05))
     ax.legend(fontsize=9, loc="upper left"); ax.set_title(f"{tag} cue-aligned rolling decoder: pre-cue (ENL) -> post-cue", fontsize=11)
     fig.tight_layout(); p = out / f"locanmf_decoder_rolling_cue_{tag}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    return p
+
+
+def fig_rolling_cue_by_animal(animal, labels, out):
+    """Per-ANIMAL cue-aligned sliding-window decoder, one line per DATE (the rolling pre-cue->post-cue
+    decoder for Section A). Shows how that animal's position-decoding time-course evolves across sessions.
+    Reuses the fig_rolling_cue offsets/window."""
+    labels = sorted(labels, key=lambda l: l[-4:])
+    win = int(round(0.5 * FS)); offs = np.arange(int(-3.5 * FS), int(2.5 * FS), int(0.25 * FS))
+    cmap = plt.get_cmap("viridis")
+    fig, ax = plt.subplots(figsize=(10, 5.6)); allv = []
+    for i, lab in enumerate(labels):
+        sig, T, _, _, y, g, cfk = _engaged(_sess(lab))
+        accs = []
+        for o in offs:
+            ok = (cfk + o >= 0) & (cfk + o + win <= T)
+            accs.append(_bcv_acc(np.array([sig[:, c + o:c + o + win].mean(1) for c in cfk[ok]]), y[ok], g[ok]))
+        c = cmap(i / max(1, len(labels) - 1))
+        ax.plot(offs / FS, accs, marker="o", ms=3, color=c, label=f"{lab[-4:-2]}/{lab[-2:]} (n={len(y)})")
+        allv += [a for a in accs if a == a]
+    ax.axvspan(-3.0, 0, color="grey", alpha=0.08); ax.axvline(0, color="k", lw=1.2); ax.axhline(1 / 6, color="k", ls="--", lw=0.8)
+    ax.set_xlabel("time from cue (s)  [grey = pre-cue ENL]"); ax.set_ylabel("decoding accuracy (0.5s window, block-CV)")
+    ax.set_ylim(max(0.0, min([1 / 6] + allv) - 0.05), min(1.0, max([1 / 6] + allv) + 0.05))
+    ax.legend(fontsize=9, loc="upper left", title="session")
+    ax.set_title(f"{animal} cue-aligned rolling decoder across sessions (pre-cue ENL -> post-cue)", fontsize=11)
+    fig.tight_layout(); p = out / f"locanmf_decoder_rolling_by_animal_{animal}.png"; fig.savefig(p, dpi=130); plt.close(fig)
     return p
 
 
