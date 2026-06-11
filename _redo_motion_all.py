@@ -88,8 +88,10 @@ def _copy_outputs(mc, date, sess):
             else:
                 d = os.path.join(n_mc, rel, f) if rel != "." else os.path.join(n_mc, f)
                 os.makedirs(os.path.dirname(d), exist_ok=True)
-                if not (os.path.exists(d) and os.path.getsize(d) == os.path.getsize(s)):
-                    shutil.copy2(s, d)
+                # ALWAYS overwrite: re-corrected SVD/U/shifts/frames_average are the SAME
+                # SIZE as the buggy originals, so a size-check would wrongly skip and leave
+                # the buggy results on N (same class of bug as the bin).
+                shutil.copy2(s, d)
                 nbin += 1
     return nbin, mbin
 
