@@ -19,7 +19,8 @@ DAYS = {
  "PS95": {"0605":"PS95_20260605_163102","0606":"PS95_20260606_160806","0607":"PS95_20260607_155000","0608":"PS95_20260608_180943"},
 }
 LM      = {"PS92":"v2","PS93":"v2","PS94":"v1","PS95":"v1"}
-REALIGN = {"PS92":["0605","0607","0608"],"PS93":["0605","0607","0608"],"PS94":["0605"],"PS95":["0605"]}
+# re-align ALL non-ref days (6/6 references were corrected, so every day must re-register)
+REALIGN = {a:["0605","0607","0608"] for a in ("PS92","PS93","PS94","PS95")}
 
 def results(an, day): return f"{NL}/2026{day}/{DAYS[an][day]}/motion_corrected/wfield_local_results".replace("\\","/")
 def landmarks(an):
@@ -32,11 +33,10 @@ def run(cmd):
 for an in ("PS92","PS93","PS94","PS95"):
     print(f"\n================ {an} (6/6 ref, {LM[an]} landmarks) ================", flush=True)
     ref_res = results(an,"0606").replace("/","\\"); lm = landmarks(an).replace("/","\\")
-    # 1) recompute the 6/6 reference's own allen dir with the chosen landmarks (v2 for PS92/93)
-    if LM[an] == "v2":
-        print("  recompute 6/6 reference allen (v2)", flush=True)
-        run(["wfield_local.apply_allen_transform", ref_res, "--landmarks", lm,
-             "--output", ref_res + r"\allen_aligned_affine8v1"])
+    # 1) recompute the 6/6 reference's own allen dir from its (now-corrected) U with its landmarks
+    print(f"  recompute 6/6 reference allen ({LM[an]})", flush=True)
+    run(["wfield_local.apply_allen_transform", ref_res, "--landmarks", lm,
+         "--output", ref_res + r"\allen_aligned_affine8v1"])
     # 2) cross-register the realign days to the 6/6 reference
     cfg = {"animal":an,"mode":"reference-native","func_channel":1,"reference":f"{an}_0606",
            "output":f"{NL}/xday/{an}_xall".replace("\\","/"),"warp_u":True,
