@@ -19,6 +19,7 @@ from lxml import etree
 DST = r"N:\MICROSCOPE\Priya\Widefield\labcams\PS92_94_95_affine8v1.pptx"  # canonical deck on MICROSCOPE
 TAG = "affine8v1"
 D = r"E:\labcams_data"  # figures still read locally from E (SVD/alignment/maps kept there)
+DN = r"N:\MICROSCOPE\Priya\Widefield\labcams"  # 6/5-6/8 figures live on N (E cleaned + corrected)
 
 # (title, date_subtitle, motion_corrected_dir, label)
 SESSIONS = [
@@ -41,37 +42,37 @@ SESSIONS = [
     ("PS95 - 2026-06-04", "ROI crop; cleanpairs frame-map mapping",
      fr"{D}\20260604\PS95_20260604_165712\motion_corrected", "PS95_0604_affine8v1"),
     ("PS92 - 2026-06-05", "trial-triggered; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
-     fr"{D}\20260605\PS92_20260605_125023\motion_corrected", "PS92_0605_affine8v1"),
+     fr"{DN}\20260605\PS92_20260605_125023\motion_corrected", "PS92_0605_affine8v1"),
     ("PS93 - 2026-06-05 (new animal)", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
-     fr"{D}\20260605\PS93_20260605_174659\motion_corrected", "PS93_0605_affine8v1"),
+     fr"{DN}\20260605\PS93_20260605_174659\motion_corrected", "PS93_0605_affine8v1"),
     ("PS94 - 2026-06-05", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
-     fr"{D}\20260605\PS94_20260605_142009\motion_corrected", "PS94_0605_affine8v1"),
+     fr"{DN}\20260605\PS94_20260605_142009\motion_corrected", "PS94_0605_affine8v1"),
     ("PS95 - 2026-06-05", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 1 s pre",
-     fr"{D}\20260605\PS95_20260605_163102\motion_corrected", "PS95_0605_affine8v1"),
+     fr"{DN}\20260605\PS95_20260605_163102\motion_corrected", "PS95_0605_affine8v1"),
     ("PS92 - 2026-06-06", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 2 s pre",
-     fr"{D}\20260606\PS92_20260606_122451\motion_corrected", "PS92_0606_affine8v1"),
+     fr"{DN}\20260606\PS92_20260606_122451\motion_corrected", "PS92_0606_affine8v1"),
     ("PS93 - 2026-06-06", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 2 s pre",
-     fr"{D}\20260606\PS93_20260606_180117\motion_corrected", "PS93_0606_affine8v1"),
+     fr"{DN}\20260606\PS93_20260606_180117\motion_corrected", "PS93_0606_affine8v1"),
     ("PS94 - 2026-06-06", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 2 s pre",
-     fr"{D}\20260606\PS94_20260606_140854\motion_corrected", "PS94_0606_affine8v1"),
+     fr"{DN}\20260606\PS94_20260606_140854\motion_corrected", "PS94_0606_affine8v1"),
     ("PS95 - 2026-06-06", "continuous; ROI; cleanpairs frame-map; cue 2 s post / 2 s pre",
-     fr"{D}\20260606\PS95_20260606_160806\motion_corrected", "PS95_0606_affine8v1"),
+     fr"{DN}\20260606\PS95_20260606_160806\motion_corrected", "PS95_0606_affine8v1"),
     ("PS92 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260607\PS92_20260607_121538\motion_corrected", "PS92_0607_affine8v1"),
+     fr"{DN}\20260607\PS92_20260607_121538\motion_corrected", "PS92_0607_affine8v1"),
     ("PS93 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260607\PS93_20260607_174844\motion_corrected", "PS93_0607_affine8v1"),
+     fr"{DN}\20260607\PS93_20260607_174844\motion_corrected", "PS93_0607_affine8v1"),
     ("PS94 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260607\PS94_20260607_140731\motion_corrected", "PS94_0607_affine8v1"),
+     fr"{DN}\20260607\PS94_20260607_140731\motion_corrected", "PS94_0607_affine8v1"),
     ("PS95 - 2026-06-07", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260607\PS95_20260607_155000\motion_corrected", "PS95_0607_affine8v1"),
+     fr"{DN}\20260607\PS95_20260607_155000\motion_corrected", "PS95_0607_affine8v1"),
     ("PS92 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260608\PS92_20260608_133759\motion_corrected", "PS92_0608_affine8v1"),
+     fr"{DN}\20260608\PS92_20260608_133759\motion_corrected", "PS92_0608_affine8v1"),
     ("PS93 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260608\PS93_20260608_195203\motion_corrected", "PS93_0608_affine8v1"),
+     fr"{DN}\20260608\PS93_20260608_195203\motion_corrected", "PS93_0608_affine8v1"),
     ("PS94 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260608\PS94_20260608_153651\motion_corrected", "PS94_0608_affine8v1"),
+     fr"{DN}\20260608\PS94_20260608_153651\motion_corrected", "PS94_0608_affine8v1"),
     ("PS95 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
-     fr"{D}\20260608\PS95_20260608_180943\motion_corrected", "PS95_0608_affine8v1"),
+     fr"{DN}\20260608\PS95_20260608_180943\motion_corrected", "PS95_0608_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
