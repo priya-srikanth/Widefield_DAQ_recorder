@@ -105,8 +105,17 @@ in `~/source/` (the established home for run drivers, alongside `run_lick_batch.
 The committed pieces (this spec + the figure functions N1–N4 + date filters + `locanmf_xsession_deck.py`)
 fully define the deck; the two `~/source/` drivers are thin orchestration over them.
 
-## Build result (2026-06-10)
+## Build result (2026-06-10, v1.5)
 Deck built: **59 slides, 112 embedded figures**, 0 empty content slides. Decoding sane on the fresh
 re-registration (first-lick 2 s: 6/5 0.66–0.83, 6/8 0.81–0.89; SSp ≫ chance ⇒ regime B confirmed).
 **PS93 SSp-left ≪ SSp-right lateralization (F15/F15a) SURVIVES re-registration**: SSp-L/R = PS92 .50/.50,
 **PS93 .48/.60 (L−R −0.12)**, PS94 .50/.53, PS95 .66/.59 — same direction/magnitude as before, n=4 (6/5–6/8).
+
+## Corrected re-registration (2026-06-16, v1.6 — supersedes v1.5)
+The 6/6 reference was corrected on the imaging machine, shifting alignment for more sessions. Re-ran
+LocaNMF on **13 sessions**: all 6/5 (×4) + PS92/PS94/PS95 6/6,6/7,6/8 (×9). **PS93 6/6,6/7,6/8 excluded**
+— PS93's reference was always correct → its alignment is byte-unchanged (its earlier v1.5 LocaNMF stays).
+`rerun_locanmf_xreg.py` now lists these 13 with `FORCE=True` (a corrected pass may preserve mtimes).
+Decode still sane (first-lick 2 s: 6/5 0.67–0.76, 6/8 0.80–0.88; SSp ≫ chance). **PS93 SSp-L≪R asymmetry
+HOLDS on corrected data**: SSp-L/R = PS92 .49/.49, **PS93 .48/.60 (L−R −0.12)**, PS94 .51/.51, PS95 .57/.55.
+Deck (59 slides/112 figs) + figures re-published to `cue_analysis/`.
