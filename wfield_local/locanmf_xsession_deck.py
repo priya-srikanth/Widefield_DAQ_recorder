@@ -199,16 +199,17 @@ def build_xsession_ppt(src: Path, out_name="spout_position_decoder_xsession_6on.
     divider("G. Cross-session stability — is the geometry stable enough for pre/post-stroke?",
             "Frozen-model transfer across days (does one decoder/encoder generalize?) + crossnobis (is the RDM drift real or noise?).")
     s = slide()
-    title(s, "Frozen-model feasibility: within- vs cross-session accuracy (Allen-ROI, first-lick 2 s)",
-          "Train on one session, apply to the others. Small within→cross gap ⇒ a single pre-stroke "
-          "decoder/encoder transfers across days. Decoder loses only 0.01–0.13 (stays 0.62–0.68); encoder 0.01–0.07.")
-    big(s, src / "locanmf_xsession_generalization_summary.png", top=1.6, width=12.4)
+    title(s, "Frozen-model feasibility: within- vs cross-session (Allen-ROI, first-lick 2 s)",
+          "Train on one session, apply to the others. Decoder loses only 0.01–0.13 (stays 0.62–0.68); encoder "
+          "(template) 0.01–0.07. Encoder shown on its own terms too: cross-session reconstruction R² = "
+          "PS92 .41 / PS93 .74 / PS94 .48 / PS95 .22 (PS95 dragged by its 6/5).")
+    big(s, src / "locanmf_xsession_generalization_summary.png", top=1.65, width=13.0)
     for a in ANIMALS:
         s = slide()
-        title(s, f"{a} — cross-session train×test accuracy (decoder & encoder)",
-              "Rows = train session, cols = test. Diagonal = within-session (held-out block-CV); off-diagonal = "
-              "frozen transfer. Weak transfer is concentrated in specific sessions, not pervasive.")
-        big(s, src / f"locanmf_xsession_generalization_{a}.png", top=1.55, width=12.0)
+        title(s, f"{a} — cross-session train×test: decoder acc, encoder acc, encoder R²",
+              "Rows = train session, cols = test. Diagonal = within-session (held-out block-CV; R² diag = self-"
+              "reconstruction ≈1); off-diagonal = frozen transfer. Weak transfer is concentrated in specific sessions.")
+        big(s, src / f"locanmf_xsession_generalization_{a}.png", top=1.55, width=12.8)
     s = slide()
     title(s, "Crossnobis (noise-unbiased) RDM — the cross-day 'drift' was mostly estimation noise",
           "Removing the positive noise bias, within-animal cross-day stability rises to 93–135% of the noise "
