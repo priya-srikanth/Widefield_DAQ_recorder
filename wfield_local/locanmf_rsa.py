@@ -70,6 +70,49 @@ def _rdm_and_reliability(label):
     return full, rel
 
 
+def _crossnobis_rdm(X, y, g):
+    """Cross-validated (crossnobis) RDM: noise-UNBIASED dissimilarities. Diagonal noise-whitening, then
+    for every ordered pair of block-folds (a,b): D[p,q] += <(mu_p^a - mu_q^a), (mu_p^b - mu_q^b)>_prec.
+    Independent-fold noise cross-multiplies to ~0 -> identical positions give ~0 (can go negative), unlike
+    the positively-biased 1-corr RDM. 6x6, symmetric, diag 0."""
+    pos = np.array(DISPLAY_ORDER); P = len(pos)
+    num = np.zeros(X.shape[1]); den = 0
+    for p in pos:
+        m = y == p
+        if m.sum() >= 2:
+            num += ((X[m] - X[m].mean(0)) ** 2).sum(0); den += int(m.sum()) - 1
+    var = num / max(den, 1); prec = 1.0 / np.maximum(var, np.nanmedian(var) * 1e-3)
+    ub = np.unique(g); k = min(4, len(ub))
+    if k < 2:
+        return np.full((P, P), np.nan)
+    foldid = np.array([int(np.where(ub == gi)[0][0]) % k for gi in g])
+    mean = {(f, ip): (X[(foldid == f) & (y == p)].mean(0) if ((foldid == f) & (y == p)).sum() >= 1 else None)
+            for f in range(k) for ip, p in enumerate(pos)}
+    D = np.zeros((P, P)); C = np.zeros((P, P))
+    for fa in range(k):
+        for fb in range(k):
+            if fa == fb:
+                continue
+            for ip in range(P):
+                for iq in range(ip + 1, P):
+                    a, b, c, d = mean[(fa, ip)], mean[(fa, iq)], mean[(fb, ip)], mean[(fb, iq)]
+                    if a is None or b is None or c is None or d is None:
+                        continue
+                    v = float(np.sum((a - b) * prec * (c - d)))
+                    D[ip, iq] += v; D[iq, ip] += v; C[ip, iq] += 1; C[iq, ip] += 1
+    out = np.full((P, P), np.nan); nz = C > 0; out[nz] = D[nz] / C[nz]; np.fill_diagonal(out, 0.0)
+    return out
+
+
+def _crossnobis_and_reliability(label):
+    s = next(x for x in SESSIONS if x["label"] == label)
+    X, y, g, _, _, _ = _trial_features(s, _args())
+    full = _crossnobis_rdm(X, y, g)
+    ub = np.unique(g); A = set(ub[::2].tolist()); mA = np.array([gi in A for gi in g])
+    rel = _spearman(_triu(_crossnobis_rdm(X[mA], y[mA], g[mA])), _triu(_crossnobis_rdm(X[~mA], y[~mA], g[~mA])))
+    return full, rel
+
+
 def _triu(m):
     iu = np.triu_indices(m.shape[0], 1)
     return m[iu]
@@ -319,6 +362,65 @@ def fig_rsa_hemisphere(out, dates=None, tag=""):
     return p1, p2
 
 
+def fig_rsa_crossnobis(out, dates=None, tag=""):
+    """Crossnobis (noise-unbiased) RDM version of fig_rsa_sessions: tests whether the apparent cross-day
+    'drift' in the 1-corr RDM is real geometry change vs estimation-noise inflation. Same 3 panels."""
+    labs = sorted([s["label"] for s in SESSIONS if dates is None or s["label"][-4:] in dates],
+                  key=lambda l: (l[:4], l[-4:]))
+    rdms, rels = {}, {}
+    for l in labs:
+        try:
+            rdms[l], rels[l] = _crossnobis_and_reliability(l)
+        except Exception as ex:
+            print(f"  {l} cn skip: {str(ex)[:50]}", flush=True)
+    labs = [l for l in labs if l in rdms]; vecs = {l: _triu(rdms[l]) for l in labs}
+    n = len(labs); S = np.full((n, n), np.nan)
+    for i in range(n):
+        for j in range(n):
+            S[i, j] = _spearman(vecs[labs[i]], vecs[labs[j]])
+    animals = sorted({l[:4] for l in labs}); aof = [l[:4] for l in labs]
+    wa, ac, nc = {}, {}, {}
+    for a in animals:
+        idx = [k for k in range(n) if aof[k] == a]; oth = [k for k in range(n) if aof[k] != a]
+        wp = [S[i, j] for ii, i in enumerate(idx) for j in idx[ii + 1:]]; ap2 = [S[i, j] for i in idx for j in oth]
+        wa[a] = np.nanmean(wp) if wp else np.nan; ac[a] = np.nanmean(ap2) if ap2 else np.nan
+        nc[a] = np.nanmean([rels[l] for l in labs if l[:4] == a])
+    ardm = {a: np.nanmean([rdms[l] for l in labs if l[:4] == a], axis=0) for a in animals}
+    A = np.full((len(animals), len(animals)), np.nan)
+    for i, ai in enumerate(animals):
+        for j, aj in enumerate(animals):
+            A[i, j] = _spearman(_triu(ardm[ai]), _triu(ardm[aj]))
+    fig = plt.figure(figsize=(18, 6))
+    ax = fig.add_subplot(1, 3, 1)
+    im = ax.imshow(S, cmap="viridis", vmin=np.nanpercentile(S, 5), vmax=1)
+    ax.set_xticks(range(n)); ax.set_xticklabels([f"{l[:4]} {l[-4:-2]}/{l[-2:]}" for l in labs], rotation=90, fontsize=6)
+    ax.set_yticks(range(n)); ax.set_yticklabels([f"{l[:4]} {l[-4:-2]}/{l[-2:]}" for l in labs], fontsize=6)
+    ax.set_title("Session x session RSA (CROSSNOBIS RDMs; blocks=animal)", fontsize=10); fig.colorbar(im, ax=ax, shrink=0.7)
+    ax = fig.add_subplot(1, 3, 2); x = np.arange(len(animals)); w = 0.35
+    ax.bar(x - w / 2, [wa[a] for a in animals], w, label="within-animal", color="#2980b9")
+    ax.bar(x + w / 2, [ac[a] for a in animals], w, label="across-animal", color="#c0392b")
+    for i, a in enumerate(animals):
+        ax.plot([i - w, i + w], [nc[a], nc[a]], color="#555", ls="--", lw=1.2,
+                label="noise ceiling (split-half)" if i == 0 else None)
+        frac = wa[a] / nc[a] if nc[a] and np.isfinite(nc[a]) else np.nan
+        ax.text(i, max(wa[a], 0) + 0.02, f"{100*frac:.0f}%" if np.isfinite(frac) else "", ha="center", fontsize=7, color="#2980b9")
+    ax.axhline(0, color="k", lw=0.6); ax.set_xticks(x); ax.set_xticklabels(animals); ax.set_ylabel("mean 2nd-order RSA (Spearman)")
+    ax.legend(fontsize=7); ax.set_title("CROSSNOBIS within vs across\n(% = within / noise ceiling)", fontsize=10)
+    ax = fig.add_subplot(1, 3, 3)
+    im = ax.imshow(A, cmap="viridis", vmin=np.nanpercentile(A, 5), vmax=1)
+    ax.set_xticks(range(len(animals))); ax.set_xticklabels(animals); ax.set_yticks(range(len(animals))); ax.set_yticklabels(animals)
+    for i in range(len(animals)):
+        for j in range(len(animals)):
+            ax.text(j, i, f"{A[i,j]:.2f}", ha="center", va="center", fontsize=8, color="white" if A[i, j] < 0.6 else "black")
+    ax.set_title("animal x animal crossnobis-RDM similarity", fontsize=10)
+    fig.suptitle(f"Crossnobis (noise-unbiased) RDM RSA [{tag or 'all'}] (n={n}) — vs 1-corr RDM, tests if drift is real", fontsize=12)
+    fig.tight_layout(); p = out / f"locanmf_rsa_crossnobis{('_' + tag) if tag else ''}.png"; fig.savefig(p, dpi=130); plt.close(fig)
+    for a in animals:
+        frac = wa[a] / nc[a] if nc[a] else np.nan
+        print(f"  CN {a}: within={wa[a]:.2f} across={ac[a]:.2f} ceiling={nc[a]:.2f} within/ceiling={frac:.0%}", flush=True)
+    return p
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--output", required=True, type=Path)
@@ -327,6 +429,7 @@ def main() -> int:
     args = ap.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     dates = set(args.dates.split(",")) if args.dates else None
     print("wrote", fig_rsa_sessions(args.output, dates, args.tag).name, flush=True)
+    print("wrote", fig_rsa_crossnobis(args.output, dates, args.tag).name, flush=True)
     print("wrote", fig_rsa_rdms(args.output, dates, args.tag).name, flush=True)
     for nm in fig_rsa_hemisphere(args.output, dates, args.tag):
         print("wrote", nm.name, flush=True)

@@ -66,6 +66,19 @@ For each animal:
 - **encoder explained variance per region — absolute AND normalized-to-1.0 (FEVE).**
   → existing per-session `fig_encoding_r2_by_region_{label}` already has both panels; group by animal.
 
+### Section G — cross-session stability (frozen-model feasibility + crossnobis)
+Added v1.7 to answer the representational-drift concern. `locanmf_xsession_generalization.py`: train a
+decoder/encoder on one session, apply to the others (common Allen-ROI basis) — the within→cross accuracy
+gap = the cost of a frozen pre-stroke model. `locanmf_rsa.fig_rsa_crossnobis`: noise-unbiased (crossnobis)
+RDM, tests whether the 1−corr cross-day drift is real or estimation noise.
+- Frozen decoder transfers with **0.01–0.13** loss (stays 0.62–0.68); encoder 0.01–0.07. Weak transfer is
+  concentrated in specific sessions (PS95 6/5), not pervasive (6/6↔6/7↔6/8 cross-decode 0.72–0.81).
+- Crossnobis: within-animal cross-day stability rises to **93–135%** of ceiling (from 37–88% under 1−corr;
+  PS95 37→93%, PS93 50→99%) ⇒ the apparent drift was mostly noise. (>100% = split-half ceiling is a
+  conservative half-data reference.)
+Conclusion: pre/post comparison is tractable — per-session decoders (primary) AND a frozen pre-stroke
+model (now empirically justified) are both viable.
+
 ### Section F — closing, cross-mouse / cross-session (all sessions)
 - **cross-mouse cortical representation of spout position** → `locanmf_cross_mouse_comparison.png`.
 - **within-animal consistency** of per-position decode/encode → `locanmf_within_animal_consistency*.png`
