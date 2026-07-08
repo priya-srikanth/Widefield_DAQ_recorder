@@ -7,8 +7,10 @@ Grouped ANIMAL-first, date-second, per LOCANMF_XSESSION_DECK_SPEC.md (sections A
   D  per date -> all animals : encoder time-local quiet baseline
   E  per animal : expected MO/SS activity by position + encoding EV per region (abs + FEVE 1.0)
   F  cross-mouse representation + within-animal consistency + RSA/RDM (6/5-6/8)
+  G  cross-session stability: frozen-model generalization (decoder+encoder) + crossnobis RDM
+  H  415 nm hemodynamic-correction control: raw 470 vs 415-only vs corrected (all sessions)
 
-Consumes PNGs produced by build_xsession_figs.py. Missing images are skipped.
+Consumes PNGs produced by build_xsession_figs.py + hemo_correction_compare.py. Missing images are skipped.
 
     python -c "from pathlib import Path; from wfield_local.locanmf_xsession_deck import build_xsession_ppt; \
                build_xsession_ppt(Path('C:/Users/sabatini/source/cue_lick'))"
@@ -216,6 +218,26 @@ def build_xsession_ppt(src: Path, out_name="spout_position_decoder_xsession_6on.
           "ceiling (from 37–88% under 1−corr): PS95 37→93%, PS93 50→99%. The fine geometry is day-to-day stable. "
           "(>100% = the split-half ceiling is a conservative half-data reference.)")
     big(s, src / f"locanmf_rsa_crossnobis_{TAG}.png", top=1.65, width=13.0)
+
+    # ---------------- Section H ----------------
+    divider("H. Hemodynamic (415 nm) correction control",
+            "Does the 415 isosbestic correction matter, and how much of the position signal is hemodynamic/movement?")
+    s = slide()
+    title(s, "415 correction across all sessions — raw 470 vs 415-only vs corrected",
+          "Bars = mean±SEM across 16 sessions, points = sessions (by animal). 415-only (GCaMP-independent) "
+          "decodes NEAR corrected ⇒ position decodability is heavily hemodynamic/movement; correction removes "
+          "it and a genuine calcium code remains. Correction is necessary but not sufficient (still need movement regressors).")
+    big(s, src / "hemo_correction_summary.png", top=1.65, width=13.0)
+    for a in ANIMALS:
+        for d, dl in DATES:
+            fp = src / f"hemo_correction_compare_{a}_{d}.png"
+            if not fp.exists():
+                continue
+            s = slide()
+            title(s, f"{a} {dl} — 415 correction: signals + decode/encode (raw 470 / 415-only / corrected)",
+                  "SSp-m/n + MOp/s traces (raw dashed vs corrected solid), removed 415 component, and decoder/"
+                  "encoder for the three signals across first-lick / post-cue / pre-cue windows.")
+            big(s, fp, top=1.5, width=13.0)
 
     outp = src / out_name; prs.save(str(outp)); return outp
 
