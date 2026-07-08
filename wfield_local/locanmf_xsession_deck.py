@@ -228,6 +228,13 @@ def build_xsession_ppt(src: Path, out_name="spout_position_decoder_xsession_6on.
           "decodes NEAR corrected ⇒ position decodability is heavily hemodynamic/movement; correction removes "
           "it and a genuine calcium code remains. Correction is necessary but not sufficient (still need movement regressors).")
     big(s, src / "hemo_correction_summary.png", top=1.65, width=13.0)
+    s = slide()
+    title(s, "Where does the 415 hemodynamic position signal live? — distributed, not global, not focal-orofacial",
+          "Region-only: calcium (corrected) is FOCAL in SSp (0.68); 415 is FLAT across regions (VIS highest) → "
+          "not orofacial. Global test: global-mean-alone = chance and removing it doesn't hurt → NOT a global "
+          "signal; the info is in the spatial pattern. So 415 = distributed movement-linked hemodynamics; the "
+          "focal SSp calcium code dominates in the task region. (Even corrected VIS decodes ~0.45 = cortex-wide movement confound.)")
+    big(s, src / "hemo_415_localization.png", top=1.7, width=12.8)
     for a in ANIMALS:
         for d, dl in DATES:
             fp = src / f"hemo_correction_compare_{a}_{d}.png"
