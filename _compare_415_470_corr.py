@@ -13,7 +13,7 @@ from pathlib import Path
 from wfield_local.framemap_event_maps import (
     _load_common, _corrected_frame_samples, _nearest_corrected_frame,
     _load_cue_events, _classify_cues, _load_lick_events, _classify_events,
-    _weighted_map, _overlay_regions,
+    _weighted_map, _overlay_regions, POSITION_NAMES, DISPLAY_ORDER,
 )
 NL = r"N:\MICROSCOPE\Priya\Widefield\labcams"
 OUT = os.path.join(NL, "channel_comparison"); os.makedirs(OUT, exist_ok=True)
@@ -60,14 +60,17 @@ cue_codes = _classify_cues(ev["cue_samples"], ev["strobe_samples"], ev["strobe_c
 pre_n = int(round(CUE_PRE * FS)); post_n = int(round(CUE_POST * FS))
 def cok(ci): a, b = ci - pre_n, ci + post_n; return a >= 0 and b <= T and (csample[b-1]-csample[a])/fsd <= CUE_PRE+CUE_POST+1.0
 cvalid = (cue_codes >= 0) & np.array([cok(int(c)) for c in cue_frames])
-cf = cue_frames[cvalid]; print(f"cue: pooled {len(cf)} valid trials")
-fig, axes = plt.subplots(2, 3, figsize=(14, 9.5), constrained_layout=True)
-post = [_weighted_map(U, win_avg(S, cf, 0, post_n).astype(np.float32)) for _, S in SIGNALS]
-delta = [_weighted_map(U, (win_avg(S, cf, 0, post_n) - win_avg(S, cf, -pre_n, 0)).astype(np.float32)) for _, S in SIGNALS]
-row_plot(axes[0], post, [f"{n}\n{CUE_POST:g}s post-cue" for n, _ in SIGNALS], edges, "post-cue mean")
-row_plot(axes[1], delta, [f"{n}\npost - pre" for n, _ in SIGNALS], edges, "post - pre-cue")
-fig.suptitle(f"{lab}: cue-aligned maps, pooled ({len(cf)} trials) - 415 vs raw 470 vs corrected 470", fontsize=15)
-for ext in ("png", "svg"): fig.savefig(os.path.join(OUT, f"{lab}_cue_415_vs_470_vs_corr.{ext}"), dpi=160)
+print(f"cue: {int(cvalid.sum())} valid trials across positions")
+fig, axes = plt.subplots(6, 3, figsize=(13, 22), constrained_layout=True)
+for r, code in enumerate(DISPLAY_ORDER):
+    name = POSITION_NAMES[code]; fr = cue_frames[cvalid & (cue_codes == code)]
+    if len(fr) == 0:
+        for ax in axes[r]: ax.set_axis_off(); ax.set_title(f"{name}: no trials", fontsize=11)
+        continue
+    delta = [_weighted_map(U, (win_avg(S, fr, 0, post_n) - win_avg(S, fr, -pre_n, 0)).astype(np.float32)) for _, S in SIGNALS]
+    row_plot(axes[r], delta, [f"{n}\n{name} n={len(fr)}" for n, _ in SIGNALS], edges, "post-pre")
+fig.suptitle(f"{lab}: cue-aligned (post-pre) by spout position - 415 vs raw 470 vs corrected 470", fontsize=15)
+for ext in ("png", "svg"): fig.savefig(os.path.join(OUT, f"{lab}_cue_415_vs_470_vs_corr_by_position.{ext}"), dpi=150)
 plt.close(fig)
 
 # ---- LICK ----
@@ -78,11 +81,16 @@ lcodes = _classify_events(evl["lick_samples"], evl["strobe_samples"], evl["strob
 lpost = max(1, int(round(LICK_POST * FS)))
 def lok(fr): return 0 <= fr and fr + lpost <= T and (csl[fr+lpost-1]-csl[fr])/fsl <= LICK_POST+1.0
 lvalid = (lcodes >= 0) & np.array([lok(int(fr)) for fr in lick_frames])
-lf = lick_frames[lvalid]; print(f"lick: pooled {len(lf)} valid events")
-fig, axes = plt.subplots(1, 3, figsize=(14, 5.2), constrained_layout=True)
-lmaps = [_weighted_map(U, win_avg(S, lf, 0, lpost).astype(np.float32)) for _, S in SIGNALS]
-row_plot(axes, lmaps, [f"{n}\n{LICK_POST*1000:.0f}ms post-lick" for n, _ in SIGNALS], edges, "post-lick mean")
-fig.suptitle(f"{lab}: lick-aligned maps, pooled ({len(lf)} events) - 415 vs raw 470 vs corrected 470", fontsize=15)
-for ext in ("png", "svg"): fig.savefig(os.path.join(OUT, f"{lab}_lick_415_vs_470_vs_corr.{ext}"), dpi=160)
+print(f"lick: {int(lvalid.sum())} valid events across positions")
+fig, axes = plt.subplots(6, 3, figsize=(13, 22), constrained_layout=True)
+for r, code in enumerate(DISPLAY_ORDER):
+    name = POSITION_NAMES[code]; fr = lick_frames[lvalid & (lcodes == code)]
+    if len(fr) == 0:
+        for ax in axes[r]: ax.set_axis_off(); ax.set_title(f"{name}: no licks", fontsize=11)
+        continue
+    lmaps = [_weighted_map(U, win_avg(S, fr, 0, lpost).astype(np.float32)) for _, S in SIGNALS]
+    row_plot(axes[r], lmaps, [f"{n}\n{name} n={len(fr)}" for n, _ in SIGNALS], edges, "post-lick")
+fig.suptitle(f"{lab}: lick-aligned ({LICK_POST*1000:.0f}ms post) by spout position - 415 vs raw 470 vs corrected 470", fontsize=15)
+for ext in ("png", "svg"): fig.savefig(os.path.join(OUT, f"{lab}_lick_415_vs_470_vs_corr_by_position.{ext}"), dpi=150)
 plt.close(fig)
 print(f"\nwrote cue + lick comparisons -> {OUT}")
