@@ -65,6 +65,27 @@ for an in ANIMALS:
         if fam_name == "Per-session photobleaching":  # alignment overlay right after photobleach, before motion QC
             img_slide(f"{an}  -  Alignment to 6/6 reference (vasculature overlay, all days)", ALIGN(an), top=1.3, h=5.6)
 
+# ---- Hemodynamic-correction comparison section (415 vs raw 470 vs corrected 470) ----
+def img_centered(text, png, h, aspect, top=1.15):
+    s = prs.slides.add_slide(BLANK); _title(s, text)
+    if png and os.path.exists(png):
+        w = h * aspect; s.shapes.add_picture(png, Inches(max(0.2, (13.333 - w) / 2)), Inches(top), height=Inches(h)); return True
+    missing.append(text); return False
+
+CC = os.path.join(NL, "channel_comparison")
+title_slide("Hemodynamic correction: 415 nm vs 470 nm vs corrected 470 nm",
+            "Example session PS92 6/8. 415 nm (isosbestic) = hemodynamics; 470 nm raw = neural + hemo; "
+            "corrected 470 nm = neural (415 regressed out via SVTcorr). Same U_atlas basis; shared color "
+            "scale per row; all in 6/6 CCF. (SVGs in labcams\\channel_comparison\\.)")
+img_centered("415 vs 470 vs corrected — cue-aligned, pooled (post-cue mean; post-pre delta)",
+             os.path.join(CC, "PS92_0608_cue_415_vs_470_vs_corr.png"), 6.1, 13/9.5)
+img_centered("415 vs 470 vs corrected — lick-aligned, pooled (150 ms post)",
+             os.path.join(CC, "PS92_0608_lick_415_vs_470_vs_corr.png"), 4.4, 13/5.2, top=1.6)
+img_centered("415 vs 470 vs corrected — cue-aligned (post-pre) by spout position",
+             os.path.join(CC, "PS92_0608_cue_415_vs_470_vs_corr_by_position.png"), 6.4, 13/22, top=1.0)
+img_centered("415 vs 470 vs corrected — lick-aligned (150 ms post) by spout position",
+             os.path.join(CC, "PS92_0608_lick_415_vs_470_vs_corr_by_position.png"), 6.4, 13/22, top=1.0)
+
 prs.save(OUT)
 print(f"saved {OUT}  ({len(prs.slides)} slides)")
 if missing:
