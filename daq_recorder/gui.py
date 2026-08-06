@@ -20,6 +20,7 @@ from .writer import HDF5Recorder
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PACKAGE_DIR / "default_config.json"
+GUI_VERSION_LABEL = "Lean GUI v2026.08.05"
 
 
 @dataclass
@@ -137,7 +138,7 @@ class StripChart(ttk.Frame):
         while self.points and self.points[0][0] < cutoff:
             self.points.popleft()
 
-    def push(self, values: np.ndarray) -> None:
+    def push(self, values: np.ndarray, *, redraw: bool = True) -> None:
         if not values.size:
             return
         values = np.asarray(values)
@@ -167,7 +168,7 @@ class StripChart(ttk.Frame):
                 self.value_label.configure(text=str(int(round(self.points[-1][1]))))
             else:
                 self.value_label.configure(text=f"{self.points[-1][1]:.3f}")
-        if not self.suspend_redraw:
+        if redraw and not self.suspend_redraw:
             self.redraw()
 
     def _append_raw_values(self, values: np.ndarray) -> None:
@@ -268,13 +269,13 @@ class StripChart(ttk.Frame):
 class RecorderApp(tk.Tk):
     def __init__(self, config_path: Path):
         super().__init__()
-        self.title("Widefield DAQ Recorder")
+        self.title(f"Widefield DAQ Recorder - {GUI_VERSION_LABEL}")
         self.geometry("1260x900")
         self.minsize(900, 600)
 
         self.config_path = config_path
         self.config_obj = RecorderConfig.load(config_path)
-        self.title(self.config_obj.app_title)
+        self.title(f"{self.config_obj.app_title} - {GUI_VERSION_LABEL}")
         self.backend = None
         self.writer: HDF5Recorder | None = None
         self.recording = False
@@ -294,7 +295,12 @@ class RecorderApp(tk.Tk):
         self.analog_stats_var = tk.StringVar(value="")
         self.digital_stats_var = tk.StringVar(value="")
         self._last_plot_update = 0.0
-        self._plot_interval_s = 0.20
+        # Tk canvas redraws are the most expensive part of live display. Keep
+        # acquisition/writing complete, but throttle display work aggressively.
+        self._plot_interval_s = 0.30
+        self._poll_interval_ms = 75
+        self._max_queue_items_per_poll = 12
+        self._resize_in_progress = False
         self._analog_edges: np.ndarray | None = None
         self._analog_high_samples: np.ndarray | None = None
         self._analog_last: np.ndarray | None = None
@@ -307,7 +313,7 @@ class RecorderApp(tk.Tk):
 
         self._build_ui()
         self._load_config_into_ui(self.config_obj)
-        self.after(50, self._poll_queue)
+        self.after(self._poll_interval_ms, self._poll_queue)
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self, padding=10)
@@ -349,6 +355,7 @@ class RecorderApp(tk.Tk):
         self.plot_scroll = ScrollableFrame(plot_frame)
         self.plot_scroll.pack(fill=tk.BOTH, expand=True)
         self.plot_scroll.canvas.bind("<Configure>", self._schedule_plot_resize, add="+")
+        self.bind("<Configure>", self._schedule_plot_resize, add="+")
 
         self._build_config_panel(config_scroll.content)
         self._build_plot_panel(self.plot_scroll.content)
@@ -637,7 +644,7 @@ class RecorderApp(tk.Tk):
         self.plots.clear()
         self.plot_routes.clear()
         colors = ["#1f77b4", "#2ca02c", "#9467bd", "#d62728", "#8c564b", "#17becf", "#7f7f7f", "#bcbd22"]
-        display_points_per_channel = 5000
+        display_points_per_channel = 1600
         raw_display_samples = int(max(2, round(cfg.display_seconds * cfg.sample_rate_hz)))
         display_decimation = max(1, int(np.ceil(raw_display_samples / display_points_per_channel)))
         max_samples = max(2, int(np.ceil(raw_display_samples / display_decimation)))
@@ -670,17 +677,18 @@ class RecorderApp(tk.Tk):
             self.plot_routes.append((kind, source_index, plot))
         self.after_idle(self._apply_plot_resize)
     def _schedule_plot_resize(self, _event: tk.Event | None = None) -> None:
+        self._resize_in_progress = True
         for plot in self.plots:
             plot.suspend_redraw = True
         if self._resize_after_id is not None:
             self.after_cancel(self._resize_after_id)
-        self._resize_after_id = self.after(160, self._apply_plot_resize)
+        self._resize_after_id = self.after(250, self._apply_plot_resize)
 
     def _apply_plot_resize(self) -> None:
         self._resize_after_id = None
         if not self.plots or self.plot_scroll is None:
+            self._resize_in_progress = False
             return
-        self.plot_scroll.content.update_idletasks()
         viewport_height = max(1, self.plot_scroll.canvas.winfo_height())
         top = self.plot_container.winfo_y() if self.plot_container.winfo_exists() else 80
         row_gap = 4
@@ -689,10 +697,11 @@ class RecorderApp(tk.Tk):
         per_plot = int((available - row_gap * max(0, len(self.plots) - 1)) / len(self.plots))
         height = max(28, min(80, per_plot))
         for plot in self.plots:
-            plot.suspend_redraw = False
             plot.set_height(height)
+        for plot in self.plots:
+            plot.suspend_redraw = False
             plot.redraw()
-        self.plot_scroll.content.update_idletasks()
+        self._resize_in_progress = False
         self.plot_scroll._update_scroll_region_and_bar()
 
     def choose_output_directory(self) -> None:
@@ -828,7 +837,7 @@ class RecorderApp(tk.Tk):
     def _poll_queue(self) -> None:
         chunks: list[DataChunk] = []
         try:
-            for _ in range(100):
+            for _ in range(self._max_queue_items_per_poll):
                 chunk = self.data_queue.get_nowait()
                 if isinstance(chunk, Exception):
                     self._handle_backend_error(chunk)
@@ -863,24 +872,38 @@ class RecorderApp(tk.Tk):
             self._auto_stopping = True
             self.after_idle(self._finish_finite_session)
 
+        if self._resize_in_progress:
+            # Keep only the newest display chunks while the user is resizing.
+            # Recording/writing above still kept every sample.
+            self._pending_plot_chunks = chunks[-2:]
+            return
+
         self._pending_plot_chunks.extend(chunks)
+        if self.data_queue.qsize() > self._max_queue_items_per_poll:
+            self._pending_plot_chunks = self._pending_plot_chunks[-2:]
         now = time.perf_counter()
         if now - self._last_plot_update < self._plot_interval_s:
             return
         self._last_plot_update = now
 
-        plot_chunks = self._pending_plot_chunks
+        plot_chunks = self._pending_plot_chunks[-6:]
         self._pending_plot_chunks = []
         analog = np.vstack([item.analog for item in plot_chunks if item.analog.size]) if any(item.analog.size for item in plot_chunks) else np.zeros((0, 0), dtype=np.float32)
         digital = np.vstack([item.digital for item in plot_chunks if item.digital.size]) if any(item.digital.size for item in plot_chunks) else np.zeros((0, 0), dtype=np.uint8)
         self._update_analog_stats(analog)
         self._update_digital_stats(digital)
 
+        updated_plots: list[StripChart] = []
         for kind, source_index, plot in self.plot_routes:
             if kind == "analog" and source_index < analog.shape[1]:
-                plot.push(analog[:, source_index])
+                plot.push(analog[:, source_index], redraw=False)
+                updated_plots.append(plot)
             elif kind == "digital" and source_index < digital.shape[1]:
-                plot.push(digital[:, source_index])
+                plot.push(digital[:, source_index], redraw=False)
+                updated_plots.append(plot)
+        for plot in updated_plots:
+            if not plot.suspend_redraw:
+                plot.redraw()
 
 
     def _finish_finite_session(self) -> None:
@@ -982,6 +1005,7 @@ def main(argv: list[str] | None = None) -> int:
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
     return 0
+
 
 
 
