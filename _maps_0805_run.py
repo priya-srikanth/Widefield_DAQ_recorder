@@ -18,7 +18,7 @@ def do(k):
     s=S[k]; lab=f"{s['sess'][:4]}_0805_{TAG}"; mc=fr"{D}\{s['sess']}\motion_corrected"
     results=fr"{mc}\wfield_local_results"; allen=fr"{results}\{ALLEN_NAME}"
     cue=fr"{mc}\spout_trial_averages_{TAG}"; lick=fr"{mc}\lick_aligned_{TAG}"; quiet=fr"{mc}\quiet_{TAG}"; qc=fr"{mc}\motion_qc"
-    fm=fr"{mc}\{FM}"; summ=fm.replace("_frame_map.npz","_summary.json")
+    fm=glob.glob(fr"{mc}\*cleanpairs_frame_map.npz")[0]; summ=fm.replace("_frame_map.npz","_summary.json")
     cnpz=fr"{cue}\{lab}_spout_positions_1s_pre_post_delta_maps.npz"; csum=fr"{cue}\{lab}_spout_positions_1s_pre_post_delta_summary.json"
     lnpz=fr"{lick}\{lab}_lick_aligned_150ms_post_by_spout_maps.npz"; lsum=fr"{lick}\{lab}_lick_aligned_150ms_post_by_spout_summary.json"
     qf=fr"{quiet}\{lab}_quiet_frame.npy"
