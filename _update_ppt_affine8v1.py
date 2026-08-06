@@ -73,6 +73,14 @@ SESSIONS = [
      fr"{DN}\20260608\PS94_20260608_153651\motion_corrected", "PS94_0608_affine8v1"),
     ("PS95 - 2026-06-08", "FIXED motion; cross-registered to 6/6 (6/6 CCF); cue 2 s post / 2 s pre",
      fr"{DN}\20260608\PS95_20260608_180943\motion_corrected", "PS95_0608_affine8v1"),
+    ("PS92 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.87, ~2mo gap); cue 2 s post / 2 s pre",
+     fr"{DN}\20260805\PS92_20260805_181150\motion_corrected", "PS92_0805_affine8v1"),
+    ("PS93 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.92, ~2mo gap); cue 2 s post / 2 s pre",
+     fr"{DN}\20260805\PS93_20260805_201110\motion_corrected", "PS93_0805_affine8v1"),
+    ("PS94 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.92, ~2mo gap); cue 2 s post / 2 s pre",
+     fr"{DN}\20260805\PS94_20260805_124758\motion_corrected", "PS94_0805_affine8v1"),
+    ("PS95 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.92, ~2mo gap); motion QC POOR; cue 2 s post / 2 s pre",
+     fr"{DN}\20260805\PS95_20260805_155615\motion_corrected", "PS95_0805_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
@@ -299,6 +307,23 @@ if os.path.exists(pb0608_sum) and pb0608_title not in present:
     for an in ("PS92", "PS93", "PS94", "PS95"):
         per = os.path.join(pb0608_dir, f"photobleach_{an}_0608.png")
         pt = f"Photobleaching 2026-06-08: {an} per-channel trend"
+        if os.path.exists(per) and pt not in present:
+            content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
+
+# ---- 4a3c) 2026-08-05 photobleaching (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+pb0805_dir = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out_0805"
+pb0805_sum = os.path.join(pb0805_dir, "photobleach_SUMMARY.png")
+pb0805_title = "Photobleaching 2026-08-05 (4 sessions)"
+if os.path.exists(pb0805_sum) and pb0805_title not in present:
+    content(pb0805_title,
+            "415 isosbestic vs 470 functional ROI-median trends + per-session %drift. "
+            "470 stays within a few % (PS92 +0.3, PS93 +0.8, PS94 -3.9, PS95 -5.6); "
+            "larger 415 decline = violet-LED drift (removed by the 0.1 Hz hemo highpass).",
+            pb0805_sum, 0.15, 1.7, 12.9)
+    for an in ("PS92", "PS93", "PS94", "PS95"):
+        per = os.path.join(pb0805_dir, f"photobleach_{an}_0805.png")
+        pt = f"Photobleaching 2026-08-05: {an} per-channel trend"
         if os.path.exists(per) and pt not in present:
             content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
 
