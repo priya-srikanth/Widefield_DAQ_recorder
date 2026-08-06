@@ -190,9 +190,10 @@ def fig_temporal_encoder(label, out, pre_s=1.0, post_s=1.5):
             ax.set_title(f"{tit}: none"); continue
         pooled = sig[idx][:, :].mean(0)                      # 1 x T pooled activity
         for p in DISPLAY_ORDER:
-            tr = np.stack([pooled[f - pre:f + post] for f in flk[yk == p]])
-            if len(tr) < 5:
+            fp = flk[yk == p]
+            if len(fp) < 5:                                  # guard before stacking (empty -> ValueError)
                 continue
+            tr = np.stack([pooled[f - pre:f + post] for f in fp])
             m = tr.mean(0) - tr[:, :pre].mean()
             ax.plot(tax, m, label=POSITION_NAMES[p])
         ax.axvline(0, color="k", lw=1); ax.axhline(0, color="grey", lw=0.6)
