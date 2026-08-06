@@ -1,7 +1,7 @@
 """6/7 maps (cue 2s/2s, lick 150ms+quiet) + motion QC, using the 6/6-CCF allen dir
 (allen_aligned_affine8v1). DAQ loose in E:\DAQ_recorder_output. Outputs -> E (deck reads
 from E; archive then syncs to N)."""
-import os, sys, subprocess
+import os, sys, subprocess, glob
 PY=r"C:\ProgramData\anaconda3\envs\wfield\python.exe"; REPO=r"C:\Github\Widefield_DAQ_recorder"
 D=r"E:\labcams_data\20260805"; Q=r"E:\DAQ_recorder_output"; TAG="affine8v1"
 ALLEN_NAME="allen_aligned_affine8v1"
