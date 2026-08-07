@@ -34,3 +34,31 @@ positions restored (close_R=58, far_center=63).
 
 Going forward: once bit1 is fixed the DAQ strobe suffices; `--behavior-trials` is only needed
 for 8/5-8/6 (or any future session with a dead strobe bit).
+
+## Fallback when the behavior log is ALSO missing (PS93 2026-08-05) — cam1 video recovery
+PS93 8/5 had the dead strobe bit1 **and** an empty behavior log (trials.csv + events.csv both
+0 rows), so neither the DAQ nor the log carried the two lost positions. Recovered instead from
+the **head-on behavior camera (cam1)** by reading the spout's x-position per trial:
+1. **Sync-align DAQ<->cam1.** DAQ digital `sync` line (line0, 5000 Hz) rising edges and cam1
+   CSV col3 LSB rising edges are the SAME pulse train (13714 edges each, exact). Map DAQ time
+   -> cam frame via `np.interp(t, sync_daq_times, sync_cam_frames)`. (Behavior-log sync events
+   also match: 13715.) This is the same alignment that makes DAQ+camera+log agree exactly.
+2. **Detect spout x.** For each DAQ cue, grab the cam1 frame at cue+0.6 s (ffmpeg `-ss` seek;
+   cv2 lacks the AVI demuxer) and take `spout_x = argmin` of the darkest column over the bright
+   head band (`y[140:270], x[170:440]`). The mechanical spout has fixed detents, so spout_x is
+   effectively **quantized** into 5 discrete, well-gapped clusters (far_L~425, close_L~374,
+   center~327, close_R~251, far_R~202; L=high x, R=low x — head-on view is mirrored).
+3. **Classify.** deg4=far_L, deg5=far_R are unambiguous. The two contaminated codes split by a
+   2-cluster threshold: deg0 -> close_center (x>=289) vs close_R (x<289); deg1 -> close_L
+   (x>=351) vs far_center (x<351). Min per-trial margin from threshold = 10 px (no borderline
+   trials). Counts (cc73/cL71/cR67/fc68/fL64/fR68, n=411) match the balanced-cycle marginals.
+4. **Apply.** Write a synthetic `trials.csv` from the recovered codes and feed it through the
+   existing `--behavior-trials` path (the recovered codes satisfy `DAQ_code==(true & ~bit1)` by
+   construction, so the order+bitmask aligner accepts them at 100%, offset=0, dead-bit=2).
+
+Scripts (repo): `_ps93_autodetect.py` (sync map + detect + classify + validation scatter),
+`_ps93_verify.py` (reference/closest-call montage), `_ps93_apply.py` (synthetic trials.csv +
+regen maps). Validation artifacts archived to N: at
+`...\20260805\PS93_20260805_201110\motion_corrected\spout_position_recovery_cam1\`
+(`ps93_autolabels.png/.npz`, `ps93_verify_montage.png`, `ps93_recovered_trials.csv`).
+Reference position frames (calibration) from PS92 8/5: `_ps93_gui_refs.py`.

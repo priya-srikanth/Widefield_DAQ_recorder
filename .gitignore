@@ -17,3 +17,7 @@ wfield_local_results/
 **/wfield_local_results/
 .idea/
 .vscode/
+*.svg
+_ps93dis/
+_ps104/
+_photobleach_out*/

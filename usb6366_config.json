@@ -6,7 +6,7 @@
   "display_seconds": 60.0,
   "max_duration_s": 0.0,
   "output_directory": "E:/DAQ_recorder_output",
-  "file_prefix": "test_labcams",
+  "file_prefix": "PS94",
   "analog_storage": "int16_scaled",
   "simulate": false,
   "analog_channels": [
