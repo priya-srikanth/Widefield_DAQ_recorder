@@ -114,6 +114,16 @@ SESSIONS = [
          h5=f"{D}/20260805/PS94_20260805_131025.h5", regime="B", fmdir=None),
     dict(label="PS95_0805", mc=f"{L}/20260805/PS95_20260805_155615/motion_corrected",
          h5=f"{D}/20260805/PS95_20260805_160437.h5", regime="B", fmdir=None),
+    # 8/6. cleanpairs frame_map present -> regime B. spout_bit1 fault (dropped close_R/far_center) is
+    # auto-repaired from the behavior log by behavior_position.classify_cues_with_backup.
+    dict(label="PS92_0806", mc=f"{L}/20260806/PS92_20260806_124426/motion_corrected",
+         h5=f"{D}/20260806/PS92_20260806_124733.h5", regime="B", fmdir=None),
+    dict(label="PS93_0806", mc=f"{L}/20260806/PS93_20260806_172253/motion_corrected",
+         h5=f"{D}/20260806/PS93_20260806_172316.h5", regime="B", fmdir=None),
+    dict(label="PS94_0806", mc=f"{L}/20260806/PS94_20260806_074320/motion_corrected",
+         h5=f"{D}/20260806/PS94_20260806_074558.h5", regime="B", fmdir=None),
+    dict(label="PS95_0806", mc=f"{L}/20260806/PS95_20260806_105300/motion_corrected",
+         h5=f"{D}/20260806/PS95_20260806_105651.h5", regime="B", fmdir=None),
 ]
 
 
