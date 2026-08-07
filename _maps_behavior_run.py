@@ -35,6 +35,8 @@ def do(date,sess):
     run(["wfield_local.framemap_event_maps","--what","lick","--daq-h5",daq,"--wfield-results",res,"--allen-dir",allen,"--frame-map",fm,"--cleanpairs-summary",summ,"--output",lick,"--label",lab,"--post-s","0.15","--quiet-frame",qf]+B)
     print(f"===== {lab} DONE =====",flush=True)
 if __name__=="__main__":
-    date=sys.argv[1]; only=sys.argv[2:]
-    for sess in (only or list(SESS[date])): do(date,sess)
-    print("\nBEHAVIOR MAPS DONE",flush=True)
+    date=sys.argv[1]; only=sys.argv[2:]; skipped=[]
+    for sess in (only or list(SESS[date])):
+        try: do(date,sess)
+        except SystemExit as e: skipped.append((sess,str(e))); print(f"  SKIP {sess}: {e}",flush=True)
+    print(f"\nBEHAVIOR MAPS DONE  (skipped: {skipped})",flush=True)
