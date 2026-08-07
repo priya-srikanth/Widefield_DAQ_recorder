@@ -40,6 +40,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score
 from wfield_local.locanmf_cue_lick_analysis import SESSIONS
 from wfield_local.plot_lick_aligned_averages import _load_daq_events, POSITION_NAMES, DISPLAY_ORDER
 from wfield_local.plot_spout_trial_averages import _load_daq_events as _load_cue_events, _classify_cues
+from wfield_local.behavior_position import classify_cues_with_backup
 from wfield_local.locanmf_crossanimal_dff import _footprint_scale, _frames
 
 
@@ -72,7 +73,7 @@ def _trial_features(s, args):
     nfeat, T = sig.shape
     cue = _load_cue_events(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
     cue_f, lick_f, csmp = _frames(s, cue, lk)
-    codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    codes = classify_cues_with_backup(s, cue)
     # block id: consecutive same-position cues = one block (positions are presented in ~6-trial blocks)
     blk_id = np.full(cue_f.size, -1, dtype=int); b = -1; prev = None
     for k in range(cue_f.size):

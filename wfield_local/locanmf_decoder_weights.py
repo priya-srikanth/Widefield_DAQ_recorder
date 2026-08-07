@@ -32,6 +32,7 @@ from wfield_local.locanmf_cue_lick_analysis import SESSIONS
 from wfield_local.locanmf_position_decoder import _trial_features, _build_signal
 from wfield_local.plot_lick_aligned_averages import POSITION_NAMES, DISPLAY_ORDER, _load_daq_events
 from wfield_local.plot_spout_trial_averages import _load_daq_events as _load_cue, _classify_cues
+from wfield_local.behavior_position import classify_cues_with_backup
 from wfield_local.locanmf_crossanimal_dff import _frames
 
 FS = 31.23
@@ -256,7 +257,7 @@ def fig_top_components(label, out, topn=10):
 def _lick_trials(label):
     s = _sess(label); sig, _ = _build_signal(s, "locanmf"); T = sig.shape[1]
     cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
-    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    cf, lf, _ = _frames(s, cue, lk); codes = classify_cues_with_backup(s, cue)
     blk = np.zeros(len(codes), int); b = 0
     for i in range(1, len(codes)):
         if codes[i] != codes[i - 1]:
@@ -314,7 +315,7 @@ def _engaged(s):
     """sig, T, first-lick frames, position codes, block ids for engaged (cue+lick) trials."""
     sig, _ = _build_signal(s, "locanmf"); T = sig.shape[1]
     cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
-    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    cf, lf, _ = _frames(s, cue, lk); codes = classify_cues_with_backup(s, cue)
     blk = _blocks(codes); ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right")
     first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
     keep = [k for k in range(cf.size) if codes[k] >= 0 and first[k] > 0 and 0 < rt[k] <= 2 * FS]
@@ -419,7 +420,7 @@ def fig_first40(out, date="0604", control="0603", minutes=40):
             if d == date:
                 # engaged fraction early vs late (cue followed by lick within 2s, over all cues)
                 cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
-                cf2, lf2, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+                cf2, lf2, _ = _frames(s, cue, lk); codes = classify_cues_with_backup(s, cue)
                 ls = np.sort(lf2); j = np.searchsorted(ls, cf2, side="right")
                 fst = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = fst - cf2
                 engf = (fst > 0) & (rt > 0) & (rt <= 2 * FS); early = cf2 < T40
@@ -456,7 +457,7 @@ def fig_v1_vs_v2_alignment(labels, out, tag):
     post2 = int(round(2 * FS)); v1a, v2a = [], []
     for lab in labels:
         s = _sess(lab); cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
-        cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+        cf, lf, _ = _frames(s, cue, lk); codes = classify_cues_with_backup(s, cue)
         blk = _blocks(codes); ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right")
         first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
         accs = []

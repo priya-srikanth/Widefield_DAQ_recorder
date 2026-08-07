@@ -31,6 +31,7 @@ from wfield_local.locanmf_cue_lick_analysis import SESSIONS, ANIMAL_COLOR
 from wfield_local.locanmf_position_decoder import _trial_features, _build_signal
 from wfield_local.plot_lick_aligned_averages import POSITION_NAMES, DISPLAY_ORDER, _load_daq_events
 from wfield_local.plot_spout_trial_averages import _load_daq_events as _load_cue, _classify_cues
+from wfield_local.behavior_position import classify_cues_with_backup
 from wfield_local.locanmf_crossanimal_dff import _frames
 
 FS = 31.23
@@ -94,7 +95,7 @@ def _quiet_baseline_local(s, sig, nbins=24):
 def _engaged_frames(s, post_s=2.0):
     """First-lick frame + position for engaged (cue+lick) trials, with the post window length (frames)."""
     cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
-    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    cf, lf, _ = _frames(s, cue, lk); codes = classify_cues_with_backup(s, cue)
     ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right")
     first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
     post_n = int(round(post_s * FS)); fr, y = [], []
@@ -179,7 +180,7 @@ def fig_temporal_encoder(label, out, pre_s=1.0, post_s=1.5):
     ssp = np.where(np.char.startswith(rn.astype(str), "SSp"))[0]
     mo = np.array([i for i in range(len(rn)) if rn[i].startswith(("MOp", "MOs"))])
     cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
-    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    cf, lf, _ = _frames(s, cue, lk); codes = classify_cues_with_backup(s, cue)
     ls = np.sort(lf); j = np.searchsorted(ls, cf, side="right"); first = np.where(j < ls.size, ls[np.clip(j, 0, ls.size - 1)], -1); rt = first - cf
     pre = int(pre_s * FS); post = int(post_s * FS); tax = np.arange(-pre, post) / FS
     keep = [k for k in range(cf.size) if codes[k] >= 0 and first[k] > 0 and 0 < rt[k] <= 2 * FS and first[k] - pre >= 0 and first[k] + post <= T]
@@ -274,7 +275,7 @@ def fig_encoder_vs_svd(label, out):
     Ar = np.load(f"{mc}/locanmf_affine8v1_final/{label}_locanmf_A.npy"); Af = np.nan_to_num(Ar.reshape(-1, Ar.shape[2]))
     C = np.load(f"{mc}/locanmf_affine8v1_final/{label}_locanmf_C.npy"); T = SVT.shape[1]
     cue = _load_cue(s["h5"]); lk = _load_daq_events(s["h5"], "lick_analog", 2.5, 1.0, (0.001, 0.020), 0.10)
-    cf, lf, _ = _frames(s, cue, lk); codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    cf, lf, _ = _frames(s, cue, lk); codes = classify_cues_with_backup(s, cue)
     keep = [k for k in range(cf.size) if codes[k] >= 0 and int(cf[k]) - W >= 0 and int(cf[k]) + W <= T]
     cfk = np.array([int(cf[k]) for k in keep]); yk = np.array([int(codes[k]) for k in keep])
     dSVT = np.array([SVT[:, c:c + W].mean(1) - SVT[:, c - W:c].mean(1) for c in cfk])
