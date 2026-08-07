@@ -32,6 +32,7 @@ def do(date,sess):
     run(["wfield_local.framemap_event_maps","--what","lick","--daq-h5",daq,"--wfield-results",res,"--allen-dir",allen,"--frame-map",fm,"--cleanpairs-summary",summ,"--output",lick,"--label",lab,"--post-s","0.15"]+B)
     run(["wfield_local.plot_lick_position_contrasts","--label",lab,"--lick-maps",lnpz,"--allen-dir",allen,"--output",lick])
     run(["wfield_local.plot_lick_vs_cue_spout_maps","--label",lab,"--cue-maps",cnpz,"--lick-maps",lnpz,"--allen-dir",allen,"--output",lick,"--cue-summary",csum,"--lick-summary",lsum])
+    run(["wfield_local.quiet_periods","--daq-h5",daq,"--label",lab,"--output",quiet,"--frame-map",fm,"--cleanpairs-summary",summ])
     run(["wfield_local.framemap_event_maps","--what","lick","--daq-h5",daq,"--wfield-results",res,"--allen-dir",allen,"--frame-map",fm,"--cleanpairs-summary",summ,"--output",lick,"--label",lab,"--post-s","0.15","--quiet-frame",qf]+B)
     print(f"===== {lab} DONE =====",flush=True)
 if __name__=="__main__":
