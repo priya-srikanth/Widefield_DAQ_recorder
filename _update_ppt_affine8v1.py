@@ -81,6 +81,14 @@ SESSIONS = [
      fr"{DN}\20260805\PS94_20260805_124758\motion_corrected", "PS94_0805_affine8v1"),
     ("PS95 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.92, ~2mo gap); motion QC POOR; cue 2 s post / 2 s pre",
      fr"{DN}\20260805\PS95_20260805_155615\motion_corrected", "PS95_0805_affine8v1"),
+    ("PS92 - 2026-08-06", "FIXED motion; cross-reg to 6/6 (NCC 0.91); positions recovered from behavior log (dead strobe bit1); cue 2 s post / 2 s pre",
+     fr"{DN}\20260806\PS92_20260806_124426\motion_corrected", "PS92_0806_affine8v1"),
+    ("PS93 - 2026-08-06", "FIXED motion; cross-reg to 6/6 (NCC 0.94); positions recovered from behavior log (dead strobe bit1); motion QC CHECK; cue 2 s post / 2 s pre",
+     fr"{DN}\20260806\PS93_20260806_172253\motion_corrected", "PS93_0806_affine8v1"),
+    ("PS94 - 2026-08-06", "FIXED motion; cross-reg to 6/6 (NCC 0.93); positions recovered from behavior log (dead strobe bit1); cue 2 s post / 2 s pre",
+     fr"{DN}\20260806\PS94_20260806_074320\motion_corrected", "PS94_0806_affine8v1"),
+    ("PS95 - 2026-08-06", "FIXED motion; cross-reg to 6/6 (NCC 0.93); positions recovered from behavior log (dead strobe bit1); cue 2 s post / 2 s pre",
+     fr"{DN}\20260806\PS95_20260806_105300\motion_corrected", "PS95_0806_affine8v1"),
 ]
 TRANSFORM_NOTE = ("8-point AFFINE transform (OB_center/L/R, RSP_base, MOp_L/R, SS_L/R), "
                   "hand-placed landmarks v1; ROI-aware warp to the 540x640 Allen atlas grid. "
@@ -324,6 +332,23 @@ if os.path.exists(pb0805_sum) and pb0805_title not in present:
     for an in ("PS92", "PS93", "PS94", "PS95"):
         per = os.path.join(pb0805_dir, f"photobleach_{an}_0805.png")
         pt = f"Photobleaching 2026-08-05: {an} per-channel trend"
+        if os.path.exists(per) and pt not in present:
+            content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
+
+# ---- 4a3d) 2026-08-06 photobleaching (idempotent) ----
+present = {slide_title(s) for s in prs.slides}
+pb0806_dir = r"C:\Github\Widefield_DAQ_recorder\_photobleach_out_0806"
+pb0806_sum = os.path.join(pb0806_dir, "photobleach_SUMMARY.png")
+pb0806_title = "Photobleaching 2026-08-06 (4 sessions)"
+if os.path.exists(pb0806_sum) and pb0806_title not in present:
+    content(pb0806_title,
+            "415 isosbestic vs 470 functional ROI-median trends + per-session %drift. "
+            "470 stays within a few % (PS92 +2.5, PS93 -2.5, PS94 -0.3, PS95 -1.3); "
+            "larger 415 decline = violet-LED drift (removed by the 0.1 Hz hemo highpass).",
+            pb0806_sum, 0.15, 1.7, 12.9)
+    for an in ("PS92", "PS93", "PS94", "PS95"):
+        per = os.path.join(pb0806_dir, f"photobleach_{an}_0806.png")
+        pt = f"Photobleaching 2026-08-06: {an} per-channel trend"
         if os.path.exists(per) and pt not in present:
             content(pt, "415 vs 470 ROI-median intensity (binned + linear fit)", per, 0.6, 1.7, 12.0)
 
