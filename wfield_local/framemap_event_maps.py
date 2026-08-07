@@ -78,6 +78,25 @@ def _load_common(args):
     return U, SVTcorr, edges, offset
 
 
+def _behavior_cue_codes(trials_csv, daq_cue_codes):
+    """Recover true spout positions from the behavior trials.csv when a DAQ strobe bit is
+    dead. Aligns the behavior pos_idx sequence to the DAQ cues by order and verifies the
+    DAQ code equals the true code with the missing bit masked (>=98%)."""
+    import csv as _csv
+    pos = [int(r["pos_idx"]) for r in _csv.DictReader(open(trials_csv))]
+    n = len(daq_cue_codes); daq = np.asarray(daq_cue_codes)
+    for off in range(0, max(1, len(pos) - n) + 1):
+        cand = np.asarray(pos[off:off + n], dtype=np.int64)
+        if len(cand) != n:
+            continue
+        for mbit in (2, 1, 4):
+            if np.mean((cand & ~mbit) == daq) >= 0.98:
+                print(f"[behavior] aligned trials.csv offset={off}, dead-bit={mbit} "
+                      f"({np.mean((cand & ~mbit)==daq)*100:.1f}% match)", flush=True)
+                return cand
+    raise SystemExit("[behavior] could not align trials.csv to DAQ cues")
+
+
 def run_cue(args) -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     ev = _load_cue_events(args.daq_h5)
@@ -87,6 +106,8 @@ def run_cue(args) -> int:
     fsd = ev["sample_rate_hz"]
     cue_frames = _nearest_corrected_frame(ev["cue_samples"], csample)
     cue_codes = _classify_cues(ev["cue_samples"], ev["strobe_samples"], ev["strobe_codes"])
+    if getattr(args, "behavior_trials", None):
+        cue_codes = _behavior_cue_codes(args.behavior_trials, cue_codes)
 
     pre_n = int(round(args.pre_s * args.fs))
     post_n = int(round(args.post_s * args.fs))
@@ -167,6 +188,14 @@ def run_lick(args) -> int:
     fsd = ev["sample_rate_hz"]
     lick_frames = _nearest_corrected_frame(ev["lick_samples"], csample)
     codes = _classify_events(ev["lick_samples"], ev["strobe_samples"], ev["strobe_codes"])
+    if getattr(args, "behavior_trials", None):
+        # map each lick to the most-recent cue's TRUE (behavior-log) position
+        cue_ev = _load_cue_events(args.daq_h5)
+        true_cue = _behavior_cue_codes(
+            args.behavior_trials,
+            _classify_cues(cue_ev["cue_samples"], cue_ev["strobe_samples"], cue_ev["strobe_codes"]))
+        j = np.searchsorted(cue_ev["cue_samples"], ev["lick_samples"], side="right") - 1
+        codes = np.where(j >= 0, true_cue[np.clip(j, 0, len(true_cue) - 1)], -1).astype(np.int64)
 
     post_n = max(1, int(round(args.post_s * args.fs)))
 
@@ -263,6 +292,9 @@ def main() -> int:
     p.add_argument("--label", required=True)
     p.add_argument("--offset", type=int, default=None, help="cleanpairs chosen_exposure_offset (else read from --cleanpairs-summary)")
     p.add_argument("--cleanpairs-summary", type=Path, default=None)
+    p.add_argument("--behavior-trials", type=Path, default=None,
+                   help="behavior trials.csv (pos_idx) to recover TRUE spout positions when a "
+                        "DAQ strobe bit is dead; aligned to DAQ cues by order + bit-mask check.")
     p.add_argument("--fs", type=float, default=31.23)
     p.add_argument("--pre-s", type=float, default=1.0)
     p.add_argument("--post-s", type=float, default=None, help="cue default 1.0; lick default 0.150")

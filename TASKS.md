@@ -51,3 +51,6 @@ GPU: re-run LocaNMF for a session after its `wfield_local_results` mtime updates
 Cross-session-to-6/6 emits the CCF allen dir as **`allen_aligned_affine8v1`** (the
 standard name the GPU/LocaNMF, maps, and deck all expect) -- it CONTAINS the 6/6-CCF
 alignment. Do not use a custom name (e.g. xday6) on N: or the GPU won't find it.
+
+## Dead strobe bit1 (2026-08-05/06)
+Widefield DAQ strobe bit1 dead 8/5-8/6 -> close_R+far_center lost from DAQ; recovered from behavior trials.csv via `--behavior-trials` (see STROBE_BIT1_RECOVERY.md). Hardware fix pending for 8/7+.

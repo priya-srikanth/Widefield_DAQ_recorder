@@ -68,3 +68,6 @@ intermediates. For a single re-corrected session, delete session-scoped after by
 its bin on M: + outputs on N:. Keep any new correction not yet transferred to standby.
 
 See also: `TASKS.md` (decisions), `MOTION_CORRECTION_SIGN_BUG.md`, `MOTION_REDO_STATUS.md`.
+
+## Dead strobe bit / behavior-log position recovery
+If spout cue/lick maps show <6 positions, a DAQ strobe bit may be dead (see 8/5-8/6). Recover TRUE positions from `N:\MICROSCOPE\Priya\Behavior_logs\Widefield\<sess>	rials.csv` via `framemap_event_maps --behavior-trials <trials.csv>` (batch: `_maps_behavior_run.py <date>`). See STROBE_BIT1_RECOVERY.md.
