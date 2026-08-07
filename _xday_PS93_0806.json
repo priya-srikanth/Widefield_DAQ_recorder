@@ -1,0 +1,17 @@
+{
+  "animal": "PS93",
+  "mode": "reference-native",
+  "func_channel": 1,
+  "reference": "PS93_0606",
+  "output": "N:/MICROSCOPE/Priya/Widefield/labcams/xday/PS93_0806",
+  "warp_u": true,
+  "sessions": {
+    "PS93_0606": {
+      "results": "N:/MICROSCOPE/Priya/Widefield/labcams/20260606/PS93_20260606_180117/motion_corrected/wfield_local_results",
+      "landmarks": "N:/MICROSCOPE/Priya/Widefield/labcams/20260606/PS93_20260606_180117/raw_widefield_data/dorsal_cortex_landmarks_v2.json"
+    },
+    "PS93_0806": {
+      "results": "E:/labcams_data/20260806/PS93_20260806_172253/motion_corrected/wfield_local_results"
+    }
+  }
+}
