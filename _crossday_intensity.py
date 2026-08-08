@@ -16,6 +16,7 @@ for date in sorted(os.listdir(NL)):
         fa=os.path.join(dp,sess,"motion_corrected","wfield_local_results","frames_average.npy")
         m=re.match(r"(PS\d+)",sess)
         if not (os.path.exists(fa) and m): continue
+        if m.group(1)=="PS104": continue  # separate cranial-window mouse; not analyzed with the cohort
         favg=np.load(fa)  # (2,H,W): ch0=415, ch1=470
         ref=favg[1]; brain=binary_erosion(ref>0.45*ref.max(),iterations=6)
         if brain.sum()<200: brain=ref>np.percentile(ref,40)
