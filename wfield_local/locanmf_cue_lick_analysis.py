@@ -36,6 +36,7 @@ from wfield_local.plot_lick_aligned_averages import (
 from wfield_local.plot_spout_trial_averages import (
     _load_daq_events as _load_cue_events, _classify_cues,
 )
+from wfield_local.framemap_event_maps import _behavior_cue_codes  # recovered-position override
 from wfield_local.locanmf_lick_aligned import (
     _corrected_frame_samples, _nearest_corrected_frame, _quiet_zscore,
 )
@@ -160,6 +161,10 @@ def _process(s, args):
         cue_f = _event_frame_indices_from_pco(cue["cue_samples"], cue["pco_samples"]) // 2
         lick_f = _event_frame_indices_from_pco(lk["lick_samples"], lk["pco_samples"]) // 2
     codes = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    # If a dead strobe bit made the DAQ positions wrong (e.g. PS93 8/5), override with the
+    # cam1/behavior-recovered true positions (aligns by order + bitmask, verifies >=98%).
+    if s.get("behavior_trials"):
+        codes = _behavior_cue_codes(s["behavior_trials"], codes)
 
     pre_n = int(round(args.pre_s * args.fs)); post_n = int(round(args.post_s * args.fs))
     resp_n = int(round(args.resp_s * args.fs))

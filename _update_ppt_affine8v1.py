@@ -75,7 +75,7 @@ SESSIONS = [
      fr"{DN}\20260608\PS95_20260608_180943\motion_corrected", "PS95_0608_affine8v1"),
     ("PS92 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.87, ~2mo gap); cue 2 s post / 2 s pre",
      fr"{DN}\20260805\PS92_20260805_181150\motion_corrected", "PS92_0805_affine8v1"),
-    ("PS93 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.92, ~2mo gap); ALL 6 SPOUT POSITIONS recovered from cam1 head-on video (dead strobe bit1 + empty behavior log; spout-x per DAQ-synced frame, discrete clusters, min margin 10 px); cue 2 s post / 2 s pre",
+    ("PS93 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.92, ~2mo gap); ALL 6 SPOUT POSITIONS recovered from cam1 head-on video + HUMAN-VERIFIED (dead strobe bit1 + empty behavior log; spout-x per DAQ-synced frame; 279/279 ambiguous trials confirmed in review GUI, 0 corrections); cue 2 s post / 2 s pre",
      fr"{DN}\20260805\PS93_20260805_201110\motion_corrected", "PS93_0805_affine8v1"),
     ("PS94 - 2026-08-05", "FIXED motion; cross-reg to 6/6 (NCC 0.92, ~2mo gap); cue 2 s post / 2 s pre",
      fr"{DN}\20260805\PS94_20260805_124758\motion_corrected", "PS94_0805_affine8v1"),

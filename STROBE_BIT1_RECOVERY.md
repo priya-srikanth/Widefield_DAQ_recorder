@@ -62,3 +62,15 @@ regen maps). Validation artifacts archived to N: at
 `...\20260805\PS93_20260805_201110\motion_corrected\spout_position_recovery_cam1\`
 (`ps93_autolabels.png/.npz`, `ps93_verify_montage.png`, `ps93_recovered_trials.csv`).
 Reference position frames (calibration) from PS92 8/5: `_ps93_gui_refs.py`.
+
+**Human-verified.** All 279 ambiguous trials were reviewed trial-by-trial in `_ps93_gui.py`
+(closest-to-threshold first) against per-position reference frames: **0 corrections** — the
+auto-recovery was confirmed exactly. Final confirmed labels: `ps93_reviewed_trials.csv`
+(identical to the auto version). Both are on N: under the session's `spout_position_recovery_cam1\`
+(with a `README.txt`), i.e. on MICROSCOPE where the GPU reads (`M:` on the GPU box).
+
+**GPU / LocaNMF.** Position-dependent analysis MUST use the recovered CSV, not the raw DAQ
+strobe (bit1 dead -> merged codes). `wfield_local.locanmf_cue_lick_analysis` now honors a
+per-session `behavior_trials` key: set it to `...\spout_position_recovery_cam1\ps93_reviewed_trials.csv`
+for PS93 8/5 and it overrides the DAQ codes via `_behavior_cue_codes` (order + bitmask, >=98%).
+The cue/lick MAP outputs already on N: were generated with these positions.
