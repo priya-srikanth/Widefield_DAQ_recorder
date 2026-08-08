@@ -217,6 +217,11 @@ def fig_within_animal_consistency(out, dates=None, tag=None):
         if R:
             data[m] = dict(recall=np.array(R), ev=np.array(E), labels=labs)
     mice = [m for m in mice if m in data]
+    # one distinct marker+color per DATE (shared across all animal panels) so sessions are tellable apart
+    all_labels = sorted({lb for m in data for lb in data[m]["labels"]})
+    markers = ["o", "s", "^", "v", "D", "P", "X", "*", "<", ">", "p", "h", "d", "8"]
+    cmap = plt.get_cmap("tab20" if len(all_labels) > 10 else "tab10")
+    dstyle = {lb: (markers[i % len(markers)], cmap(i % cmap.N)) for i, lb in enumerate(all_labels)}
     fig, axes = plt.subplots(2, len(mice), figsize=(3.7 * len(mice), 8), squeeze=False)
     summ = {}
     for j, m in enumerate(mice):
@@ -224,11 +229,12 @@ def fig_within_animal_consistency(out, dates=None, tag=None):
                                        (1, "ev", "explained variance (encode)", 0.0)]:
             ax = axes[row][j]; Mx = data[m][key]
             for i in range(Mx.shape[0]):
-                ax.plot(range(6), Mx[i], marker="o", ms=3, lw=1, alpha=0.45, color="#888",
-                        label=data[m]["labels"][i] if row == 0 else None)
+                lb = data[m]["labels"][i]; mk, col = dstyle[lb]
+                ax.plot(range(6), Mx[i], marker=mk, ms=6, lw=1.0, alpha=0.8, color=col,
+                        mec="k", mew=0.3, zorder=3, label=lb if row == 0 else None)
             mean = np.nanmean(Mx, 0); sd = np.nanstd(Mx, 0)
-            ax.plot(range(6), mean, marker="o", ms=5, lw=2.4, color=ANIMAL_COLOR.get(m, "k"))
-            ax.fill_between(range(6), mean - sd, mean + sd, color=ANIMAL_COLOR.get(m, "k"), alpha=0.15)
+            ax.plot(range(6), mean, marker="o", ms=8, lw=3.2, color="k", zorder=10, label="mean" if row == 0 else None)
+            ax.fill_between(range(6), mean - sd, mean + sd, color=ANIMAL_COLOR.get(m, "k"), alpha=0.15, zorder=1)
             r = _pairwise_r(list(Mx)); msd = float(np.nanmean(sd))
             summ[(m, key)] = (r, msd, Mx.shape[0])
             ax.axhline(chance, color="grey", ls="--", lw=0.7)
@@ -237,10 +243,10 @@ def fig_within_animal_consistency(out, dates=None, tag=None):
             if j == 0:
                 ax.set_ylabel(ylab, fontsize=9)
             if row == 0:
-                ax.legend(fontsize=6, title="session", ncol=2)
+                ax.legend(fontsize=6, title="session (marker)", ncol=2)
     sub = f" [{tag}]" if tag else ""
     fig.suptitle(f"Within-animal per-position consistency across sessions{sub} "
-                 "(grey = each session, bold = mean +- SD; high pairwise r + low SD = reproducible)", fontsize=12)
+                 "(one marker/color per DATE (see legend), bold black = mean +- SD; high pairwise r + low SD = reproducible)", fontsize=12)
     fig.tight_layout()
     p = out / (f"locanmf_within_animal_consistency_{tag}.png" if tag else "locanmf_within_animal_consistency.png")
     fig.savefig(p, dpi=130); plt.close(fig)

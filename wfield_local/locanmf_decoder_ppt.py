@@ -343,25 +343,28 @@ def build_ppt(src: Path, out_name="spout_position_decoder_summary.pptx") -> Path
     if wac.exists():
         s = prs.slides.add_slide(BLANK)
         title(s, "WITHIN-ANIMAL consistency of per-position decode/encode across sessions (ALL 6/1-8/7)",
-              "Each animal's per-position profile per session (grey) + mean +- SD (bold). Pairwise r = pattern "
-              "reproducibility, mean SD = magnitude noise floor a post-stroke change must clear. Decode SD ~0.15-0.19 "
-              "(6-session animals span the noisy/low-engagement early days); consistency is engagement-dependent.")
+              "Each animal's per-position profile per session (one marker/color per date, see legend) + mean +- SD "
+              "(bold black). Pairwise r = pattern reproducibility, mean SD = magnitude noise floor a post-stroke change "
+              "must clear. Decode SD larger here because the 6-session animals span the noisy/low-engagement early "
+              "days; consistency is engagement-dependent (cf. the 6/5-8/7 engagement-matched slide).")
         pic(s, wac, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
-        note(s, "For each animal, the per-position decode (and encode) profile is plotted for EVERY session (grey) "
-                "with mean +/- SD (bold), over all sessions 6/1-8/7. Pairwise correlation across sessions = pattern "
+        note(s, "For each animal, the per-position decode (and encode) profile is plotted for EVERY session (each date "
+                "a distinct marker+color, see legend) with mean +/- SD (bold black), over all sessions 6/1-8/7. "
+                "Pairwise correlation across sessions = pattern "
                 "reproducibility; the SD is the magnitude noise floor a post-stroke change must exceed. " + M_DECODE)
-    wac3 = src / "locanmf_within_animal_consistency_0605-0608.png"
+    wac3 = src / "locanmf_within_animal_consistency_0605-0807.png"
     if wac3.exists():
         s = prs.slides.add_slide(BLANK)
-        title(s, "WITHIN-ANIMAL consistency on consecutive matched-engagement days (6/5-6/8)",
-              "Same analysis restricted to 6/5-6/8 (all four mice n=4). Decode per-position SD stays ~0.04-0.08 (vs "
-              "~0.15-0.19 across all baseline days) -> the all-sessions variability was the noisy/low-engagement early "
-              "days (6/1,6/4), not intrinsic. NB pairwise r understates consistency for flat high-recall profiles (PS95 "
-              "r=0.47 but SD=0.04) -> trust SD there. Engagement-matched consecutive baselines => noise floor ~0.05.")
+        title(s, "WITHIN-ANIMAL consistency on engagement-matched days (6/5-8/7, excl. noisy early June)",
+              "Same analysis but dropping the noisy/low-engagement early-June days (6/1-6/4): all four mice, 6/5-8/7. "
+              "Per-position SD tightens vs the all-days version -> most of the all-sessions spread was early-day "
+              "engagement, not intrinsic drift. One marker/color per date (legend); NB pairwise r understates "
+              "consistency for flat high-recall profiles -> trust the mean per-position SD there.")
         pic(s, wac3, left=Inches(0.2), top=Inches(1.5), width=Inches(12.9))
-        note(s, "Same within-animal consistency analysis but RESTRICTED to the consecutive, engagement-matched days "
-                "6/5-6/8 (all four mice) — isolates intrinsic session-to-session noise from early-day engagement "
-                "variability. Trust SD over pairwise r for flat high-recall profiles. " + M_DECODE)
+        note(s, "Same within-animal consistency analysis RESTRICTED to the engagement-matched days 6/5-8/7 (drops the "
+                "noisy early-June 6/1-6/4), isolating intrinsic session-to-session noise from early-day engagement "
+                "variability. Each date has a distinct marker+color; the bold black line is the per-position mean +- SD. "
+                "Trust SD over pairwise r for flat high-recall profiles. " + M_DECODE)
     rsa = src / "locanmf_rsa_sessions_0601-0807.png"
     if rsa.exists():
         s = prs.slides.add_slide(BLANK)
