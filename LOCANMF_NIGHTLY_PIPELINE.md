@@ -37,9 +37,30 @@ component counts (typically ~90–180/session).
 
 **2b. Register sessions.** Append to `SESSIONS` in `wfield_local/locanmf_cue_lick_analysis.py`. **Regime:**
 `*cleanpairs_frame_map.npz` present in `motion_corrected/` → regime `"B"` (`fmdir=None`); absent → `"A"`.
-(6/2–6/7 were all B.) **Frame-mapping is validated by SENSIBLE DECODING, not by RT** (RT is in DAQ
+(6/2–8/7 have all been B.) **Frame-mapping is validated by SENSIBLE DECODING, not by RT** (RT is in DAQ
 samples). If decoding collapses / SSp → chance, the regime is wrong → try the other regime. (6/5 bug:
 regime A gave chance, B fixed it.)
+
+**2b-bis. Spout-position source + behavior-log BACKUP.** Positions come from the DAQ spout-strobe bits
+(`_classify_cues`). The **Aug-2026 sessions had DAQ `spout_bit1` (line5) dead** → dropped close_R +
+far_center, mis-coded onto other positions. `wfield_local/behavior_position.classify_cues_with_backup`
+(wired into `_trial_features`, so decoder/encoder/cross-mouse/RSA all inherit it) auto-repairs this: if the
+DAQ shows <6 positions AND the task controller's `trials.csv` (`pos_idx`) aligns to the DAQ's good
+positions at ≥0.9 by an integer trial-offset, it substitutes the behavior-log positions; otherwise it keeps
+DAQ untouched (so good sessions are never altered). Behavior log:
+`MICROSCOPE/Priya/Behavior_logs/Widefield/<mouse>_<YYYYMMDD>_*/trials.csv`. **8/5–8/6 needed the backup on
+all mice; 8/7 the DAQ delivered all 6 positions directly (bit1 fixed) — no backup fired.** PS93 8/5 was the
+one unrecoverable session (dead bit1 + empty behavior log). NOTE: the DAQ cue/strobe stream tracks the
+**rewarded-trial subset** (reward held after ~6 misses in a row), which conveniently doubles as an
+engagement filter dropping the disengaged session tail — keep this scoping; do NOT fold in unrewarded
+trials (that is the separate future post-stroke "failed-attempt" analysis, which is movement-gated).
+
+**ORCHESTRATOR: steps 2c–2e are run by one script** — `python C:/Users/sabatini/source/nightly_figs.py
+<MMDD>`. It runs the three decode alignments, the rolling/top-component figs, the encoder, and the
+cross-mouse/within-animal/RSA. Per-day figures use `<MMDD>`; the **cross-session comparisons (cross-mouse,
+within-animal, RSA, pooled encoder FEVE) span ALL registered sessions** (dates computed from `SESSIONS`;
+tag `0601-<MMDD>`). Mouse panels are ordered **PS92, PS93, PS94, PS95** everywhere (per-day decode sorts
+`sess` by mouse; cross-mouse/RSA already sort). The individual-module commands below are what it calls.
 
 **2c. Decoding** (individual LocaNMF components, no-baseline, block-CV, first-lick 2 s):
 - rolling cue-aligned: `locanmf_decoder_weights.fig_rolling_cue(_avail("<MMDD>"), OUT, "<MMDD>")`
@@ -52,21 +73,26 @@ regime A gave chance, B fixed it.)
 heatmaps (pooled-per-animal + per-session, all 64 atlas regions); predicted maps; EV-by-position; ceiling;
 temporal; encoder-vs-SVD validation.
 
-**2e. Cross-mouse / cross-session.**
-- `python -m wfield_local.locanmf_cross_mouse --output OUT` → cross-mouse 6-panel (bars = mean ± SEM with
-  session points) **and** within-animal per-position consistency (all sessions).
-- Matched-engagement window: `locanmf_cross_mouse.fig_within_animal_consistency(OUT, dates={"0605".."<MMDD>"}, tag="0605-<MMDD>")`.
-  Window starts **6/5 for all four animals** — PS92's 6/5 was trial-triggered (others continuous) but was
-  assessed comparable (6/5 first-lick 0.77 between 6/6 0.73 and 6/7 0.84; 6/5–6/7 SD 0.05); re-verify each
-  run and exclude PS92 6/5 only if it becomes an outlier.
-- RSA: `python -m wfield_local.locanmf_rsa --output OUT` → session×session 2nd-order RSA (Spearman of 6×6
-  position RDMs) + within/across-animal stability vs split-half noise ceiling + animal×animal RDM
-  similarity, **and** hemisphere-resolved RDMs (left-hem vs right-hem position geometry, disattenuated
-  L-vs-R agreement; the PS93 lateralization probe).
+**2e. Cross-mouse / cross-session (ALL registered sessions, tag `0601-<MMDD>`).**
+- `python -m wfield_local.locanmf_cross_mouse --output OUT --dates <all> --tag 0601-<MMDD>` → cross-mouse
+  6-panel (bars = mean ± SEM with session points) **and** within-animal per-position consistency across all
+  sessions. Early June has partial mouse coverage (6/1 = PS94/PS95, 6/2 = PS92 only); the per-mouse
+  aggregation handles that. A supplementary matched-engagement `_0605-0608` within-animal slide (PS92 6/5
+  trial-triggered but comparable) is kept from an earlier run.
+- RSA: `python -m wfield_local.locanmf_rsa --output OUT --dates <all> --tag 0601-<MMDD>` → session×session
+  2nd-order RSA (Spearman of 6×6 position RDMs; sessions animal-blocked then date-ordered) + within/
+  across-animal stability vs split-half noise ceiling + animal×animal RDM similarity, **and**
+  hemisphere-resolved RDMs (left-hem vs right-hem position geometry, disattenuated L-vs-R agreement; the
+  PS93 lateralization probe). Crossnobis (noise-unbiased) variant available via `fig_rsa_crossnobis`.
+  On the RDM vs RSM question: for the correlation metric they are the same information (RDM = 1 − RSM);
+  the RDM framing only earns its keep with the **crossnobis** distance, which is noise-unbiased and on a
+  ratio scale (0 = identical), unlike the positively-biased 1−corr.
 
 **2f. Deck + commit.** In `wfield_local/locanmf_decoder_ppt.py`: add `("<MMDD>","M/D")` to `DAYS`; bump the
-newest-day rolling/encoder refs to `<MMDD>`; bump the consistency-subset slide ref to `_0605-<MMDD>`.
-Rebuild via `locanmf_decoder_ppt.build_ppt(OUT)`. Copy `.pptx` + all new PNGs to the cue_analysis dir.
+newest-day rolling/encoder (`rc`/`lr`/`encs`/`vs`/`evp`/`evc`) refs and their title text to `<MMDD>`; set
+the cross-mouse/within-animal/RSA (`cm`/`wac`/`rsa`/`rsr`/`hsum`/`hrdm`) refs to `_0601-<MMDD>`.
+Rebuild via `locanmf_decoder_ppt.build_ppt(Path(OUT))`. Copy `.pptx` + new PNGs (robocopy `/MAXAGE:<today>`)
+to the cue_analysis dir.
 Commit to `main` via the **rig procedure**: `git add -A && commit` → `git fetch origin` → `git rebase
 origin/main` → `git push` (NEVER force-push; if rejected, re-fetch/rebase/push). Stay in the `locanmf_*`
 lane — do NOT edit rig-owned files (`archive_day.py`, `framemap_event_maps.py`,
@@ -78,11 +104,15 @@ lane — do NOT edit rig-owned files (`archive_day.py`, `framemap_event_maps.py`
 ## Camera + behavior transfers (done in the evening, before the cron)
 - Dropped-frame QC: `python C:/Users/sabatini/source/dropframe_check_all.py "D:\camera"` → writes
   `dropped_frames_summary_<date>.{csv,txt}` into each date folder (one row per cam recording; gap in the
-  frame-id sequence = dropped frame; verify the timestamp gap scales as missing×4 ms = a true drop).
-- `robocopy D:\camera M:\MICROSCOPE\Priya\Behavior_Cameras /E /COPY:DAT /R:2 /W:5 /MT:16` (copy-only).
-- `robocopy D:\behavior_logs M:\MICROSCOPE\Priya\Behavior_logs /E /COPY:DAT /R:2 /W:5 /MT:16`.
-- **Never `/MIR`. Do NOT delete anything on D: until Priya confirms** — then verify per-folder
-  (recursive count + bytes) and delete only exact matches.
+  frame-id sequence = dropped frame; col1 timestamp is ns, nominal Δt = 4 ms / ~250 fps; verify the
+  timestamp gap scales as missing×4 ms = a true drop). D:\camera may contain an empty literal
+  `YYYYMMDD` template folder — skip it.
+- **Destinations are the `Widefield\` SUBDIR** (as of 2026-08-06; NOT the top level):
+  `robocopy D:\camera\<YYYYMMDD> \\research.files.med.harvard.edu\Neurobio\MICROSCOPE\Priya\Behavior_Cameras\Widefield\<YYYYMMDD> /E /MT:16 /R:2 /W:5`
+  and `robocopy D:\behavior_logs\<session> ...\Priya\Behavior_logs\Widefield\<session> /E /R:2 /W:5`
+  (camera = date-folder layout; behavior = per-session folders). Robocopy exit code 1 = "files copied OK".
+- **Never `/MIR`. Do NOT delete anything on D: until Priya confirms** — then re-verify per-folder
+  (recursive file count + total bytes, src==dst) immediately before deleting, and delete only exact matches.
 
 ## Standing safety rules
 Never delete anything on MICROSCOPE/N:. Only ever write inside `MICROSCOPE/Priya/`. Never another

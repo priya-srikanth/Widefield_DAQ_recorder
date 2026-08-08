@@ -159,7 +159,7 @@ def main() -> int:
                          "(locanmf_position_session_{label}_{tag}.png) for the animal-first deck")
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    sess = [s for s in SESSIONS if s["label"].endswith(args.date)]
+    sess = sorted([s for s in SESSIONS if s["label"].endswith(args.date)], key=lambda s: s["label"][:4])
     print(f"source={args.source} align={args.align} baseline={args.baseline} cv={args.cv}  "
           f"sessions={[s['label'] for s in sess]}  chance=0.167", flush=True)
 

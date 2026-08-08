@@ -44,7 +44,7 @@ def _sess(label):
 
 
 def _avail(date):
-    return [s["label"] for s in SESSIONS if s["label"].endswith(date)]
+    return sorted([s["label"] for s in SESSIONS if s["label"].endswith(date)], key=lambda l: l[:4])
 
 
 def _args(align="lick", post_s=2.0, baseline="none"):
