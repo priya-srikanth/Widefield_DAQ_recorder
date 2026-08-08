@@ -8,7 +8,16 @@ labcams folder name, `YYYYMMDD`. Sessions are `PSxx_<DATE>_<hhmmss>`. Default di
 - Raw + DAQ on E: `E:\labcams_data\<DATE>\<session>\raw_widefield_data\...`,
   `E:\DAQ_recorder_output\PSxx_<DATE>_*.h5` (DAQ files sit loose, not per-session).
 - MICROSCOPE (analysis): `N:\MICROSCOPE\Priya\Widefield\labcams\<DATE>\<session>\...`
-- Standby (huge files): `M:\Widefield\labcams\<DATE>\<session>\...`
+  (`N:` = `\\research.files.med.harvard.edu\Neurobio`).
+- Standby (huge files): `M:\collaborations\Priya\Widefield\labcams\<DATE>\<session>\...`
+  (`M:` = `\\standby.files.med.harvard.edu\hms\neurobio\sabatini`; note it is under
+  `collaborations\Priya\`, NOT `M:\Widefield`). The `M:` drive letter often fails to resolve
+  in the shell (per-session mapping / `net use` error 67) — copy+verify via the UNC path in
+  the Bash tool (`cp -f` then `cmp -s`), which works through the MSYS layer. `archive_day.py`'s
+  drive-letter path can break when M: is flaky; the manual UNC `cp`/`cmp` loop is the fallback.
+- Snapshots: `E:\labcams_data\snapshots\<PSxx>\<DATE>\*.tif` (~2 per session) -> copy to
+  `N:\...\labcams\<DATE>\snapshots\<PSxx>\<DATE>\`. Camlogs: per session under
+  `raw_widefield_data\*.camlog` -> mirror to N:.
 - Deck: `N:\MICROSCOPE\Priya\Widefield\labcams\PS92_94_95_affine8v1.pptx`
 - wfield python: `C:\ProgramData\anaconda3\envs\wfield\python.exe`; run with
   `PYTHONPATH=C:\Github\Widefield_DAQ_recorder`.
@@ -21,6 +30,17 @@ labcams folder name, `YYYYMMDD`. Sessions are `PSxx_<DATE>_<hhmmss>`. Default di
 - **Never delete from E:** until checked in that copies are byte-verified. Never delete from
   N: (MICROSCOPE) or any non-Priya folder without explicit per-time permission.
 - After any motion redo, the GPU must **re-run LocaNMF** on the corrected inputs.
+
+## Fast path: per-session orchestrator (preferred since 8/7)
+`_nightly_<DATE>.py` (template: `_nightly_0807.py`) chains, **one session at a time in
+chronological order**, steps 2->3->4: fixed motion -> SVD -> cross-register to that animal's
+6/6 -> **push LocaNMF inputs to N: first** (full `wfield_local_results` incl. `allen_aligned_affine8v1`
++ `*cleanpairs_frame_map.npz`/summary + `motion_correction_*`). This front-loads each session's
+GPU inputs so LocaNMF can start on it while later sessions are still correcting. It embeds the
+per-animal 6/6 reference + landmarks (PS92/PS93 v2, PS94/PS95 v1) and writes `_xday_<an>_<DATE>.json`.
+Then run `_maps_<DATE>_run.py` (N:-based; template `_maps_0807_run.py`), `_photobleach_<DATE>.py`,
+`_crossday_intensity.py`, the deck update, and the standby transfer. The step-by-step below is the
+underlying reference (same params).
 
 ## Steps (each night)
 0. **Discover** sessions/DAQ/dims; confirm no per-session landmark JSONs (expected).
