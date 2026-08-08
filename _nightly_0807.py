@@ -8,6 +8,7 @@ PY=r"C:\ProgramData\anaconda3\envs\wfield\python.exe"; REPO=r"C:\Github\Widefiel
 D=r"E:\labcams_data\20260807"; Q=r"E:\DAQ_recorder_output"; DIMS="2_460_480"
 RAW=f"pco_edge_run000_00000000_{DIMS}_uint16.dat"
 NL=r"N:\MICROSCOPE\Priya\Widefield\labcams\20260807"; N6=r"N:\MICROSCOPE\Priya\Widefield\labcams\20260606"
+XDAY=r"N:\MICROSCOPE\Priya\Widefield\labcams\xday"  # canonical cross-day QC dir (NOT under the date folder)
 REF={"PS92":("PS92_20260606_122451","v2"),"PS93":("PS93_20260606_180117","v2"),
      "PS94":("PS94_20260606_140854","v1"),"PS95":("PS95_20260606_160806","v1")}
 S={"PS94":dict(sess="PS94_20260807_104125",daq="PS94_20260807_105410.h5"),
@@ -32,7 +33,7 @@ def do(an):
     # 3 cross-register to that animal's 6/6 + emit allen_aligned_affine8v1
     refsess,lm=REF[an]
     cfg={"animal":an,"mode":"reference-native","func_channel":1,"reference":f"{an}_0606",
-         "output":fwd(fr"{NL}\xday\{an}_0807"),"warp_u":True,
+         "output":fwd(fr"{XDAY}\{an}_0807"),"warp_u":True,
          "sessions":{f"{an}_0606":{"results":fwd(fr"{N6}\{refsess}\motion_corrected\wfield_local_results"),
                                    "landmarks":fwd(fr"{N6}\{refsess}\raw_widefield_data\dorsal_cortex_landmarks_{lm}.json")},
                      f"{an}_0807":{"results":fwd(results)}}}
