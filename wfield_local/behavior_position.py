@@ -27,6 +27,7 @@ import re
 import numpy as np
 
 from wfield_local.plot_spout_trial_averages import _classify_cues
+from wfield_local.framemap_event_maps import _behavior_cue_codes  # recovered-position override
 
 BEH_ROOT = "M:/MICROSCOPE/Priya/Behavior_logs/Widefield"
 
@@ -59,6 +60,20 @@ def _behavior_positions(session):
 
 def classify_cues_with_backup(session, cue, verbose=True):
     daq = _classify_cues(cue["cue_samples"], cue["strobe_samples"], cue["strobe_codes"])
+    # Explicit human-verified recovered-position CSV (e.g. PS93 8/5 cam1 recovery, when the DAQ strobe
+    # bit is dead AND the behavior log is empty). Takes priority: same order+bitmask aligner the map
+    # pipeline (_process) uses, so decoder/encoder and maps agree. Only set for known-broken sessions.
+    bt = session.get("behavior_trials")
+    if bt and os.path.exists(bt):
+        try:
+            rec = np.asarray(_behavior_cue_codes(bt, daq), dtype=np.int16)
+            if verbose:
+                print(f"  [recovered-positions] {session['label']}: using {os.path.basename(bt)}; "
+                      f"positions {sorted(set(int(x) for x in rec if x >= 0))}", flush=True)
+            return rec
+        except SystemExit as ex:
+            if verbose:
+                print(f"  [recovered-positions] {session['label']}: {ex} -> fell back to DAQ/log", flush=True)
     good = sorted(set(int(x) for x in daq if x >= 0))
     if len(good) >= 6:
         return daq                                    # DAQ has all 6 positions -> trust it
