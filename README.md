@@ -1,5 +1,10 @@
 # Widefield DAQ Recorder
 
+> **Scope (2026-08-08):** this repo is the **DAQ recorder GUI + camera/hardware acquisition** only. The
+> widefield **preprocessing + LocaNMF analysis pipeline** (motion/SVD/Allen, decode/encode/RSA, decks) was
+> split out into **[`widefield_pipeline`](https://github.com/priya-srikanth/widefield_pipeline)** — do
+> analysis there. The two talk only through files on MICROSCOPE; there are no cross-imports.
+
 Python NI-DAQ recorder for the widefield imaging + behavior rig. It replaces the subset of WaveSurfer used here: continuous synchronized DAQ recording, live strip charts, simple controls, saved config, and HDF5 output.
 
 The current working hardware target is an **NI USB-6366 (BNC), configured as `Dev2`** on the DAQ computer.
