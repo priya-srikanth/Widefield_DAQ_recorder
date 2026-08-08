@@ -124,6 +124,16 @@ SESSIONS = [
          h5=f"{D}/20260806/PS94_20260806_074558.h5", regime="B", fmdir=None),
     dict(label="PS95_0806", mc=f"{L}/20260806/PS95_20260806_105300/motion_corrected",
          h5=f"{D}/20260806/PS95_20260806_105651.h5", regime="B", fmdir=None),
+    # 8/7. cleanpairs present -> regime B. (spout_bit1 appears fixed on 8/7 — PS94/PS95 DAQ gave all 6
+    # positions directly; behavior-backup still auto-applies if any mouse is short.)
+    dict(label="PS92_0807", mc=f"{L}/20260807/PS92_20260807_150924/motion_corrected",
+         h5=f"{D}/20260807/PS92_20260807_151146.h5", regime="B", fmdir=None),
+    dict(label="PS94_0807", mc=f"{L}/20260807/PS94_20260807_104125/motion_corrected",
+         h5=f"{D}/20260807/PS94_20260807_105410.h5", regime="B", fmdir=None),
+    dict(label="PS95_0807", mc=f"{L}/20260807/PS95_20260807_124637/motion_corrected",
+         h5=f"{D}/20260807/PS95_20260807_125106.h5", regime="B", fmdir=None),
+    dict(label="PS93_0807", mc=f"{L}/20260807/PS93_20260807_174403/motion_corrected",
+         h5=f"{D}/20260807/PS93_20260807_174416.h5", regime="B", fmdir=None),
 ]
 
 
