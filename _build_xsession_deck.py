@@ -14,13 +14,21 @@ XINT = r"C:\Github\Widefield_DAQ_recorder\_crossday_intensity_out\crossday_raw_i
 PBDIR = lambda d: rf"C:\Github\Widefield_DAQ_recorder\_photobleach_out_{d}"
 
 ANIMALS = ["PS92", "PS93", "PS94", "PS95"]
-DATES = ["0605", "0606", "0607", "0608"]
-SESS = {
- "PS92": {"0605":"PS92_20260605_125023","0606":"PS92_20260606_122451","0607":"PS92_20260607_121538","0608":"PS92_20260608_133759"},
- "PS93": {"0605":"PS93_20260605_174659","0606":"PS93_20260606_180117","0607":"PS93_20260607_174844","0608":"PS93_20260608_195203"},
- "PS94": {"0605":"PS94_20260605_142009","0606":"PS94_20260606_140854","0607":"PS94_20260607_140731","0608":"PS94_20260608_153651"},
- "PS95": {"0605":"PS95_20260605_163102","0606":"PS95_20260606_160806","0607":"PS95_20260607_155000","0608":"PS95_20260608_180943"},
-}
+import re, glob
+# Auto-discover task-era sessions (6/5 onward) from N: so new days appear with no code edit.
+MIN_DATE = "20260605"   # cross-registered era; excludes 6/1-6/4 full-FOV baseline
+def _discover():
+    sess = {a: {} for a in ANIMALS}
+    for dd in sorted(os.listdir(NL)):
+        if not re.fullmatch(r"\d{8}", dd) or dd < MIN_DATE:
+            continue
+        for a in ANIMALS:
+            for s in sorted(glob.glob(rf"{NL}\{dd}\{a}_*")):
+                if os.path.exists(rf"{s}\motion_corrected\wfield_local_results\frames_average.npy"):
+                    sess[a][dd[4:]] = os.path.basename(s); break
+    dates = sorted({k for a in ANIMALS for k in sess[a]})
+    return sess, dates
+SESS, DATES = _discover()
 def mc(an, d): return rf"{NL}\2026{d}\{SESS[an][d]}\motion_corrected"
 def lab(an, d): return f"{an}_{d}_affine8v1"
 # per-(animal,date) family -> figure path
@@ -53,15 +61,19 @@ def img_slide(text, png, top=1.15, h=6.0):
     tb.text_frame.paragraphs[0].text = "(figure not available)"; tb.text_frame.paragraphs[0].font.size = Pt(18)
     missing.append(text); return False
 
-title_slide("Cross-session aligned results (6/5-6/8)",
+_dr = f"{int(DATES[0][:2])}/{int(DATES[0][2:])}-{int(DATES[-1][:2])}/{int(DATES[-1][2:])}" if DATES else "n/a"
+title_slide(f"Cross-session aligned results ({_dr})",
             "All sessions cross-registered to each animal's 2026-06-06 session (6/6 CCF; "
-            "PS92/PS93 v2 landmarks). Grouped by animal; equivalent images across dates.")
+            "PS92/PS93 v2 landmarks). Grouped by animal; equivalent images across dates. "
+            "Auto-discovered task-era sessions (6/5 onward).")
 img_slide("Cross-date raw fluorescence intensity (all animals)", XINT, top=1.4, h=5.3)
 for an in ANIMALS:
     title_slide(an)
     for fam_name, fam_fn in FAMILIES:
         for d in DATES:
-            img_slide(f"{an}  -  {fam_name}  -  6/{int(d[2:])}", fam_fn(an, d))
+            if d not in SESS[an]:
+                continue
+            img_slide(f"{an}  -  {fam_name}  -  {int(d[:2])}/{int(d[2:])}", fam_fn(an, d))
         if fam_name == "Per-session photobleaching":  # alignment overlay right after photobleach, before motion QC
             img_slide(f"{an}  -  Alignment to 6/6 reference (vasculature overlay, all days)", ALIGN(an), top=1.3, h=5.6)
 

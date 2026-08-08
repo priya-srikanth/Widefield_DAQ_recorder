@@ -73,9 +73,17 @@ underlying reference (same params).
    - `_crossday_intensity.py` (brain-ROI median raw counts per animal across days from each
      session's `frames_average`; CAVEAT on the figure: LED is manually titrated day-to-day,
      so a trend may reflect LED, not bleaching).
-7. **Deck** -- `_update_ppt_affine8v1.py`: add `<DATE>` sessions to SESSIONS, add a
-   photobleach `<DATE>` section, refresh cross-day intensity; it swaps map pictures + refreshes
-   motion-QC images in place. Idempotent; writes a `.bak`.
+7. **Decks + cross-day** (run all three; each idempotent):
+   a. `_xall_refresh.py` -- refresh the per-animal cross-day vasculature overlays
+      (`labcams\xday\<an>_xall\<an>_cross_day_alignment_qc.png`) to include the new day.
+      Auto-discovers task-era sessions (6/5+); QC-ONLY (`warp_u` off) so it does NOT touch the
+      allen dirs the GPU uses. Writes `_xall_qc_<an>.json` configs.
+   b. `_update_ppt_affine8v1.py` -- the main deck (`PS92_94_95_affine8v1.pptx`): add `<DATE>`
+      sessions to SESSIONS, add a photobleach `<DATE>` section, refresh cross-day intensity;
+      swaps map pictures + refreshes motion-QC and quiet-lick images in place. Idempotent; `.bak`.
+   c. `_build_xsession_deck.py` -- the cleaner per-animal `cross-session_aligned.pptx`
+      (grouped by figure family across dates). Auto-discovers task-era dates (6/5+), so new days
+      appear with no code edit; rebuilds from scratch. Pulls the xall overlay from step 7a.
 8. **Archive** -- `wfield_local.archive_day archive --date <DATE>`: raw + corrected `.bin`
    -> M:, all other outputs -> N: (LocaNMF inputs first). Leaves reproducible cleanpairs on E:.
 9. **Then** return to the prior-session motion redo (`_redo_motion_all.py`), and -- once all
