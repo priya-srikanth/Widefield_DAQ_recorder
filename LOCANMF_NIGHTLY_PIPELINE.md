@@ -55,8 +55,9 @@ one unrecoverable session (dead bit1 + empty behavior log). NOTE: the DAQ cue/st
 engagement filter dropping the disengaged session tail — keep this scoping; do NOT fold in unrewarded
 trials (that is the separate future post-stroke "failed-attempt" analysis, which is movement-gated).
 
-**ORCHESTRATOR: steps 2c–2e are run by one script** — `python C:/Users/sabatini/source/nightly_figs.py
-<MMDD>`. It runs the three decode alignments, the rolling/top-component figs, the encoder, and the
+**ORCHESTRATOR: steps 2c–2e are run by one in-repo module** — `python -m wfield_local.nightly_figs
+<MMDD>` (repo root derived from `__file__`; `--output` defaults to `~/source/cue_lick`; `--from` overrides
+the cross-session span). It runs the three decode alignments, the rolling/top-component figs, the encoder, and the
 cross-mouse/within-animal/RSA. Per-day figures use `<MMDD>`; the **cross-session comparisons (cross-mouse,
 within-animal, RSA, pooled encoder FEVE) span ALL registered sessions** (dates computed from `SESSIONS`;
 tag `0601-<MMDD>`). Mouse panels are ordered **PS92, PS93, PS94, PS95** everywhere (per-day decode sorts
