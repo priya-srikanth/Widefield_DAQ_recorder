@@ -49,8 +49,11 @@ DAQ shows <6 positions AND the task controller's `trials.csv` (`pos_idx`) aligns
 positions at ≥0.9 by an integer trial-offset, it substitutes the behavior-log positions; otherwise it keeps
 DAQ untouched (so good sessions are never altered). Behavior log:
 `MICROSCOPE/Priya/Behavior_logs/Widefield/<mouse>_<YYYYMMDD>_*/trials.csv`. **8/5–8/6 needed the backup on
-all mice; 8/7 the DAQ delivered all 6 positions directly (bit1 fixed) — no backup fired.** PS93 8/5 was the
-one unrecoverable session (dead bit1 + empty behavior log). NOTE: the DAQ cue/strobe stream tracks the
+all mice; 8/7 the DAQ delivered all 6 positions directly (bit1 fixed) — no backup fired.** PS93 8/5 had a
+dead bit1 AND an empty behavior log, so it was recovered from the cam1 video (human-verified, 0 corrections;
+see STROBE_BIT1_RECOVERY.md): its SESSIONS entry carries `behavior_trials=<...spout_position_recovery_cam1/
+ps93_reviewed_trials.csv>`, which classify_cues_with_backup honors via framemap_event_maps._behavior_cue_codes
+(order+bitmask, >=98%) so decoder/encoder/cross-session agree with the maps. NOTE: the DAQ cue/strobe stream tracks the
 **rewarded-trial subset** (reward held after ~6 misses in a row), which conveniently doubles as an
 engagement filter dropping the disengaged session tail — keep this scoping; do NOT fold in unrewarded
 trials (that is the separate future post-stroke "failed-attempt" analysis, which is movement-gated).
