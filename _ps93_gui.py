@@ -91,7 +91,11 @@ def gui():
     from matplotlib.widgets import Button
     refs = ref_frames()
     state = {"pos": 0}
-    fig = plt.figure(figsize=(15, 8.5)); fig.canvas.manager.set_title("PS93 8/5 spout-position review")
+    fig = plt.figure(figsize=(15, 8.5))
+    try: fig.canvas.manager.set_window_title("PS93 8/5 spout-position review")
+    except Exception:
+        try: fig.canvas.set_window_title("PS93 8/5 spout-position review")
+        except Exception: pass
     gs = fig.add_gridspec(3, 6, height_ratios=[1, 3, 0.5], hspace=0.25, wspace=0.15)
     ref_ax = [fig.add_subplot(gs[0, j]) for j in range(6)]
     main_ax = fig.add_subplot(gs[1, :4]); info_ax = fig.add_subplot(gs[1, 4:]); info_ax.axis("off")
