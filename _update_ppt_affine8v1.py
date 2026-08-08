@@ -436,9 +436,16 @@ if ql_sessions and ql_div not in present:
     divider(ql_div, "150 ms post-lick by spout position MINUS the mean quiet-period (not-running / "
                     "not-licking) baseline = lick-evoked activity relative to the quiet state. "
                     "Quiet-period thresholds are provisional (tune later).")
+_ql_by_title = {slide_title(s): s for s in prs.slides}
 for title, qn in ql_sessions:
     ct = f"{title}: lick-evoked vs quiet baseline (150 ms post-lick)"
-    if ct not in present:
+    ex = _ql_by_title.get(ct)
+    if ex is not None:   # refresh the figure in place (e.g. after position recovery re-ran the maps)
+        for sh in [sh for sh in ex.shapes if sh.shape_type == 13]:
+            sh._element.getparent().remove(sh._element)
+        ex.shapes.add_picture(qn, Inches(2.60), Inches(1.40), width=Inches(8.20))
+        ql_added.append(title + "(refresh)")
+    else:
         content(ct, "post-lick by spout position minus quiet-period baseline (quiet-normalized)", qn, 2.60, 1.40, 8.20)
         ql_added.append(title)
 

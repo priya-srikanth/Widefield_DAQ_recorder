@@ -59,6 +59,11 @@ def main() -> int:
     ap.add_argument("--warn-px", type=float, default=5.0, help="shift magnitude flagged as notable")
     ap.add_argument("--big-px", type=float, default=20.0, help="shift magnitude flagged as failure")
     ap.add_argument("--fs", type=float, default=31.23)
+    ap.add_argument("--raw-dat", type=str, default=None,
+                    help="explicit cleanpairs .dat path (overrides glob in --motion-dir; use when the "
+                         "movie was cleaned from E: and lives elsewhere, e.g. standby)")
+    ap.add_argument("--cor-bin", type=str, default=None,
+                    help="explicit motioncorrect .bin path (overrides glob; e.g. the standby copy)")
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     md = args.motion_dir
@@ -85,8 +90,8 @@ def main() -> int:
     # mean-image sharpness raw vs corrected (channel 0)
     focus = {"raw": None, "corrected": None}
     mean_raw = mean_cor = std_cor = None
-    raw_dat = sorted(glob.glob(str(md / "*cleanpairs_*_uint16.dat")))
-    cor_bin = sorted(glob.glob(str(md / "motioncorrect_*.bin")))
+    raw_dat = [args.raw_dat] if args.raw_dat else sorted(glob.glob(str(md / "*cleanpairs_*_uint16.dat")))
+    cor_bin = [args.cor_bin] if args.cor_bin else sorted(glob.glob(str(md / "motioncorrect_*.bin")))
     good = np.flatnonzero(mag_pair <= args.big_px)  # exclude blown-up frames from imagery
     samp_src = good if good.size > 50 else np.arange(n)
     samp = samp_src[np.linspace(0, samp_src.size - 1, min(args.nsample, samp_src.size)).astype(int)]
