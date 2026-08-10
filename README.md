@@ -5,19 +5,28 @@
 > split out into **[`widefield_pipeline`](https://github.com/priya-srikanth/widefield_pipeline)** — do
 > analysis there. The two talk only through files on MICROSCOPE; there are no cross-imports.
 
-Python NI-DAQ recorder for the widefield imaging + behavior rig. It replaces the subset of WaveSurfer used here: continuous synchronized DAQ recording, live strip charts, simple controls, saved config, and HDF5 output.
+Python NI-DAQ recorder for the widefield imaging + behavior rigs. It replaces the subset of WaveSurfer used here: continuous synchronized DAQ recording, live strip charts, simple controls, saved config, and HDF5 output.
 
-The current working hardware target is an **NI USB-6366 (BNC), configured as `Dev2`** on the DAQ computer.
+The shared recorder currently has two validated hardware profiles: an **NI USB-6366 (BNC), configured as `Dev2`** for widefield imaging, and an **NI PCIe-6353, named `PCIe-6353`** for the 2pRAM behavior rig.
+
+## Recorder Profiles
+
+| Rig | Device | Config | Output folder | Instructions |
+| --- | --- | --- | --- | --- |
+| Widefield imaging | USB-6366 (`Dev2`) | `usb6366_config.json` | `E:\DAQ_recorder_output` | [Widefield launch](#launch) |
+| 2pRAM behavior | PCIe-6353 (`PCIe-6353`) | `2pRAM/pcie6353_config.json` | `E:\2pRAM_DAQ_recorder_output\data` | [2pRAM guide](2pRAM/README.md) |
+
+Both profiles use the same GUI, acquisition backend, writer, and HDF5 format. The config selects the device, channels, display order, and output location; no rig-specific fork of the Python application is required.
 
 ## Current Design Goals
 
-- Record from one NI multifunction DAQ, currently the USB-6366 on `Dev2`.
+- Record from one config-selected NI multifunction DAQ; validated targets are the USB-6366 on `Dev2` and PCIe-6353 named `PCIe-6353`.
 - Use the AI sample clock as the timing master.
 - Record synchronized analog and digital channels into one self-contained `.h5` file.
 - Provide a lightweight Tk GUI with `Play`, `Record`, `Stop`, config save/load, and live per-channel visualization.
 - Keep the app focused on recording only; cameras, LEDs, and behavior control are handled by other systems.
 
-## Current Rig Config
+## Widefield Rig Config
 
 Default USB-6366 config: `usb6366_config.json`
 
@@ -63,6 +72,7 @@ Configs:
 - `usb6366_config.json` - current working USB-6366 rig config for `Dev2`.
 - `20260529_config.json` - saved working config snapshot from the initial USB-6366 testing day.
 - `default_config.json` - general default config; currently also aligned with the USB-6366 setup.
+- `2pRAM/pcie6353_config.json` - validated PCIe-6353 profile for the 2pRAM behavior rig. See `2pRAM/README.md` for channel mapping, setup, launch, and validation details.
 
 Convenience launchers:
 
@@ -106,6 +116,8 @@ The GUI uses standard-library `tkinter`.
 
 ## Launch
 
+### Widefield USB-6366
+
 Recommended USB-6366 hardware launch:
 
 ```powershell
@@ -120,6 +132,25 @@ python .\run_daq_recorder.py --simulate
 python .\run_daq_recorder.py --config .\usb6366_config.json --hardware
 python .\diagnose_hardware.py --seconds 10
 ```
+
+### 2pRAM PCIe-6353
+
+The 2pRAM profile retains the recorder's 5 kHz sampling, 1,000-sample block, 60-second display, and compact HDF5 storage settings. Its channel names and terminal assignments come from the rig's Janelia WaveSurfer profile.
+
+```powershell
+conda activate widefield-daq
+cd "C:\Github\2pRAM_DAQ_recorder"
+python .\run_daq_recorder.py --config .\2pRAM\pcie6353_config.json --hardware
+```
+
+Simulation and hardware diagnostic:
+
+```powershell
+python .\run_daq_recorder.py --config .\2pRAM\pcie6353_config.json --simulate
+python .\diagnose_hardware.py --config .\2pRAM\pcie6353_config.json --seconds 10
+```
+
+See [the 2pRAM profile guide](2pRAM/README.md) for the complete channel table, environment setup, hardware differences, output location, and validation record.
 
 ## labcams PS Wrapper
 
@@ -244,7 +275,7 @@ The app uses analog input acquisition as the master timing source. Digital input
 
 On devices that support it, DI start can be aligned to the AI start trigger. On devices that reject a DI start trigger, the app starts DI before AI; samples remain aligned because DI is still clocked by the AI sample clock.
 
-The current validated path is the NI USB-6366 on `Dev2`. Earlier PCIe-6259/BNC-2110 work remains useful context, but is not the default target for this repo anymore.
+The validated hardware paths are the NI USB-6366 on `Dev2` for widefield imaging and the NI PCIe-6353 named `PCIe-6353` for 2pRAM. The PCIe-6353 multiplexes analog channels rather than sampling them simultaneously; its configured 10 channels at 5 kHz require 50 kS/s aggregate, comfortably below the device's 1.25 MS/s maximum. Earlier PCIe-6259/BNC-2110 work remains useful context but is not a current profile.
 
 ## Display Order
 
