@@ -25,10 +25,10 @@
       ]
     }
   ],
-  "recorder_path": "E:/labcams_data/20260821",
+  "recorder_path": "E:/labcams_data/20260822",
   "recorder_path_format": "{recorder_path}\\{filename}\\{subfolder}\\{dataname}_{run}_{nfiles}",
   "server": "udp",
   "server_port": 9999,
   "session_prefix": "PS93",
-  "snapshot_path": "E:/labcams_data/20260821"
+  "snapshot_path": "E:/labcams_data/snapshots/PS93/20260822"
 }
