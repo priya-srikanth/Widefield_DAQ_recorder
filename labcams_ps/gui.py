@@ -380,54 +380,102 @@ def _patch_gui_docks() -> None:
         upstream_led_dock.setParent(None)
 
     def restore_ps_dock_layout(self):
-        """Re-show Priya workflow docks after upstream restores stale Qt state.
-
-        labcams restores QSettings geometry/windowState after initUI(). If the
-        user previously closed a squeezed/hidden dock layout, Qt can hide or
-        collapse our docks just after they briefly appear. Re-applying our dock
-        layout from a zero-delay QTimer runs after that restoreState() call.
-        """
+        """Recover hidden/floating workflow docks without forcing geometry."""
         self._ps_hide_upstream_led_dock()
-        dock_specs = [
-            ("recControllerTab", Qt.TopDockWidgetArea),
-            ("ps_session_save_dock", Qt.LeftDockWidgetArea),
-            ("ps_preview_dock", Qt.LeftDockWidgetArea),
-            ("ps_led_control_dock", Qt.LeftDockWidgetArea),
-            ("ps_camera_crop_dock", Qt.RightDockWidgetArea),
-            ("ps_alignment_dock", Qt.RightDockWidgetArea),
-        ]
-        visible_docks = []
-        for attr, area in dock_specs:
-            dock = getattr(self, attr, None)
+        features = QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetClosable
+
+        def show_dock(dock, area):
             if dock is None:
-                continue
+                return None
+            dock.setAllowedAreas(Qt.AllDockWidgetAreas)
+            dock.setFeatures(features)
             dock.setFloating(False)
             self.addDockWidget(area, dock)
             dock.show()
             dock.raise_()
-            visible_docks.append(dock)
-        if visible_docks:
+            return dock
+
+        show_dock(getattr(self, "recControllerTab", None), Qt.TopDockWidgetArea)
+        for camera_dock in getattr(self, "tabs", []):
+            show_dock(camera_dock, Qt.TopDockWidgetArea)
+
+        for cam_widget in getattr(self, "camwidgets", []):
             try:
-                top_dock = getattr(self, "recControllerTab", None)
-                left_docks = [getattr(self, name, None) for name, area in dock_specs if area == Qt.LeftDockWidgetArea]
-                left_docks = [dock for dock in left_docks if dock is not None]
-                right_docks = [getattr(self, name, None) for name, area in dock_specs if area == Qt.RightDockWidgetArea]
-                right_docks = [dock for dock in right_docks if dock is not None]
-                if top_dock is not None:
-                    self.resizeDocks([top_dock], [120], Qt.Vertical)
-                if left_docks:
-                    self.resizeDocks(left_docks, [260] * len(left_docks), Qt.Horizontal)
-                if right_docks:
-                    self.resizeDocks(right_docks, [300] * len(right_docks), Qt.Horizontal)
+                if getattr(cam_widget, "hist", None) is None:
+                    cam_widget.histogramWin()
+                hist_dock = cam_widget.findChild(QDockWidget, "histogram cam {0}".format(cam_widget.iCam))
+                if hist_dock is None:
+                    hist_dock = self.findChild(QDockWidget, "histogram cam {0}".format(cam_widget.iCam))
+                show_dock(hist_dock, Qt.TopDockWidgetArea)
             except Exception:
                 pass
-            try:
-                settings = getattr(self, "settings", None)
-                if settings is not None:
-                    settings.setValue("windowState", self.saveState())
-            except Exception:
-                pass
-            _display("[labcams_ps] Priya workflow docks restored after Qt layout restore.")
+
+        for attr in (
+            "ps_preview_dock",
+            "ps_camera_crop_dock",
+            "ps_alignment_dock",
+            "ps_led_control_dock",
+            "ps_session_save_dock",
+        ):
+            show_dock(getattr(self, attr, None), Qt.BottomDockWidgetArea)
+
+        _display("[labcams_ps] Priya workflow docks shown; drag docks to arrange as needed.")
+
+    def add_priya_menu(self):
+        """Menu actions for recovering Priya/labcams workflow docks."""
+        if getattr(self, "_ps_priya_menu_added", False):
+            return
+        menu = self.menuBar().addMenu("Priya")
+
+        def show_dock_attr(attr, area=Qt.BottomDockWidgetArea):
+            dock = getattr(self, attr, None)
+            if dock is None:
+                return
+            dock.setFloating(False)
+            self.addDockWidget(area, dock)
+            dock.show()
+            dock.raise_()
+
+        def show_camera():
+            for dock in getattr(self, "tabs", []):
+                if dock is None:
+                    continue
+                dock.setFloating(False)
+                self.addDockWidget(Qt.TopDockWidgetArea, dock)
+                dock.show()
+                dock.raise_()
+
+        def show_histogram(saturation=False):
+            for cam_widget in getattr(self, "camwidgets", []):
+                try:
+                    if saturation:
+                        cam_widget.saturationMode()
+                    else:
+                        cam_widget.histogramWin()
+                    hist_dock = cam_widget.findChild(QDockWidget, "histogram cam {0}".format(cam_widget.iCam))
+                    if hist_dock is None:
+                        hist_dock = self.findChild(QDockWidget, "histogram cam {0}".format(cam_widget.iCam))
+                    if hist_dock is not None:
+                        hist_dock.setFloating(False)
+                        self.addDockWidget(Qt.TopDockWidgetArea, hist_dock)
+                        hist_dock.show()
+                        hist_dock.raise_()
+                except Exception as err:
+                    _display("[labcams_ps] Could not show histogram: {0}".format(err))
+
+        menu.addAction("Reset Priya Layout", self._ps_restore_dock_layout)
+        menu.addSeparator()
+        menu.addAction("Show Acquire", lambda: show_dock_attr("recControllerTab", Qt.TopDockWidgetArea))
+        menu.addAction("Show Camera View", show_camera)
+        menu.addAction("Show Histogram", lambda: show_histogram(False))
+        menu.addAction("Show Saturation Histogram", lambda: show_histogram(True))
+        menu.addSeparator()
+        menu.addAction("Show Preview", lambda: show_dock_attr("ps_preview_dock"))
+        menu.addAction("Show Camera Crop / ROI", lambda: show_dock_attr("ps_camera_crop_dock"))
+        menu.addAction("Show Alignment Preview", lambda: show_dock_attr("ps_alignment_dock"))
+        menu.addAction("Show LED Control", lambda: show_dock_attr("ps_led_control_dock"))
+        menu.addAction("Show Session Save", lambda: show_dock_attr("ps_session_save_dock"))
+        self._ps_priya_menu_added = True
 
     def init_ui_with_ps_docks(self):
         original_init_ui(self)
@@ -437,11 +485,10 @@ def _patch_gui_docks() -> None:
         self._ps_add_led_control_dock()
         self._ps_add_crop_dock()
         self._ps_add_alignment_dock()
+        self._ps_add_priya_menu()
         QTimer.singleShot(0, self._ps_hide_upstream_led_dock)
         QTimer.singleShot(0, self._ps_restore_dock_layout)
-        QTimer.singleShot(500, self._ps_hide_upstream_led_dock)
-        QTimer.singleShot(750, self._ps_restore_dock_layout)
-        QTimer.singleShot(1500, self._ps_restore_dock_layout)
+        QTimer.singleShot(250, self._ps_restore_dock_layout)
 
     def add_session_save_dock(self):
         dock = QDockWidget("Session Save", self)
@@ -457,7 +504,12 @@ def _patch_gui_docks() -> None:
         layout.addWidget(info)
 
         prefix_row = QHBoxLayout()
-        prefix_edit = QLineEdit("session")
+        saved_prefix = str(self.parameters.get("session_prefix", "") or "")
+        if not saved_prefix and _CONFIG_PATH:
+            cfg_path = Path(_CONFIG_PATH)
+            if cfg_path.parent.name.lower() == "animals":
+                saved_prefix = cfg_path.stem
+        prefix_edit = QLineEdit(saved_prefix or "session")
         prefix_row.addWidget(QLabel("Prefix"))
         prefix_row.addWidget(prefix_edit)
         layout.addLayout(prefix_row)
@@ -469,6 +521,8 @@ def _patch_gui_docks() -> None:
         folder_row.addWidget(folder_edit)
         folder_row.addWidget(browse_button)
         layout.addLayout(folder_row)
+        self.ps_session_prefix_edit = prefix_edit
+        self.ps_session_folder_edit = folder_edit
 
         session_label = QLabel("Session name not applied")
         session_label.setWordWrap(True)
@@ -546,7 +600,9 @@ def _patch_gui_docks() -> None:
             folder = folder_edit.text().strip()
             prefix = prefix_edit.text().strip() or "session"
             safe_prefix = "_".join(prefix.replace("/", "_").replace("\\", "_").split())
+            self.parameters["session_prefix"] = safe_prefix
             session_name = "{0}_{1}".format(safe_prefix, datetime.now().strftime("%Y%m%d_%H%M%S"))
+            self.parameters["last_session_name"] = session_name
             if folder:
                 os.makedirs(folder, exist_ok=True)
                 self.parameters["recorder_path"] = folder
@@ -587,6 +643,21 @@ def _patch_gui_docks() -> None:
                 folder = folder_edit.text().strip()
                 if folder:
                     cfg["recorder_path"] = folder
+                prefix = prefix_edit.text().strip() or "session"
+                safe_prefix = "_".join(prefix.replace("/", "_").replace("\\", "_").split())
+                cfg["session_prefix"] = safe_prefix
+                self.parameters["session_prefix"] = safe_prefix
+                snapshot_edit = getattr(self, "ps_snapshot_dir_edit", None)
+                snapshot_folder = ""
+                if snapshot_edit is not None:
+                    snapshot_folder = snapshot_edit.text().strip()
+                snapshot_folder = snapshot_folder or str(getattr(self, "ps_snapshot_dir", "") or self.parameters.get("snapshot_path", ""))
+                if snapshot_folder:
+                    cfg["snapshot_path"] = snapshot_folder
+                    self.parameters["snapshot_path"] = snapshot_folder
+                last_session = self.parameters.get("last_session_name", "")
+                if last_session:
+                    cfg["last_session_name"] = last_session
                 Path(filename).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
                 _CONFIG_PATH = filename
                 config_label.setText("Config: {0}".format(os.path.basename(filename)))
@@ -631,7 +702,7 @@ def _patch_gui_docks() -> None:
         load_cfg_button.clicked.connect(load_config)
 
         dock.setWidget(widget)
-        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        dock.setAllowedAreas(Qt.AllDockWidgetAreas)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_session_save_dock = dock
     def add_preview_dock(self):
@@ -659,6 +730,7 @@ def _patch_gui_docks() -> None:
         default_snap = self.parameters.get("snapshot_path") or self.parameters.get("recorder_path", "")
         self.ps_snapshot_dir = str(default_snap)
         snap_dir_edit = QLineEdit(self.ps_snapshot_dir)
+        self.ps_snapshot_dir_edit = snap_dir_edit
         snap_browse = QPushButton("Browse")
         snap_row.addWidget(QLabel("Snapshot folder"))
         snap_row.addWidget(snap_dir_edit)
@@ -741,7 +813,7 @@ def _patch_gui_docks() -> None:
             _display("[labcams_ps] could not rewire recController snapshot button: {0}".format(err))
 
         dock.setWidget(widget)
-        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        dock.setAllowedAreas(Qt.AllDockWidgetAreas)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_preview_dock = dock
     def add_led_control_dock(self):
@@ -838,7 +910,7 @@ def _patch_gui_docks() -> None:
         set_trial_triggered(trial_triggered.isChecked())
 
         dock.setWidget(widget)
-        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        dock.setAllowedAreas(Qt.AllDockWidgetAreas)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_led_control_dock = dock
 
@@ -1082,7 +1154,7 @@ def _patch_gui_docks() -> None:
         set_spin_limits()
 
         dock.setWidget(widget)
-        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        dock.setAllowedAreas(Qt.AllDockWidgetAreas)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_camera_crop_dock = dock
 
@@ -1221,7 +1293,7 @@ def _patch_gui_docks() -> None:
         clear_button.clicked.connect(clear_reference)
 
         dock.setWidget(widget)
-        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        dock.setAllowedAreas(Qt.AllDockWidgetAreas)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.ps_alignment_dock = dock
 
@@ -1234,6 +1306,7 @@ def _patch_gui_docks() -> None:
     gui.LabCamsGUI._ps_add_led_control_dock = add_led_control_dock
     gui.LabCamsGUI._ps_add_crop_dock = add_crop_dock
     gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
+    gui.LabCamsGUI._ps_add_priya_menu = add_priya_menu
     gui.LabCamsGUI._ps_gui_docks_patch = True
 
 
@@ -1297,3 +1370,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
