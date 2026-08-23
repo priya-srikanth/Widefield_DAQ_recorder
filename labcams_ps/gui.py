@@ -421,6 +421,46 @@ def _patch_gui_docks() -> None:
 
         _display("[labcams_ps] Priya workflow docks shown; drag docks to arrange as needed.")
 
+    def ps_layout_path(self):
+        if _CONFIG_PATH:
+            return Path(_CONFIG_PATH).with_suffix(".layout.bin")
+        return None
+
+    def save_ps_window_layout(self):
+        layout_path = self.ps_layout_path()
+        if layout_path is None:
+            _display("[labcams_ps] No active config; cannot save window layout.")
+            return
+        try:
+            layout_path.write_bytes(bytes(self.saveState()))
+            _display("[labcams_ps] Saved window layout: {0}".format(layout_path))
+        except Exception as err:
+            _display("[labcams_ps] Could not save window layout: {0}".format(err))
+
+    def load_ps_window_layout(self):
+        layout_path = self.ps_layout_path()
+        if layout_path is None or not layout_path.exists():
+            _display("[labcams_ps] No saved window layout for this config.")
+            return False
+        try:
+            from PyQt5.QtCore import QByteArray
+            ok = original_restore_state(self, QByteArray(layout_path.read_bytes()))
+            self._ps_hide_upstream_led_dock()
+            _display("[labcams_ps] Loaded window layout: {0}".format(layout_path))
+            return bool(ok)
+        except Exception as err:
+            _display("[labcams_ps] Could not load window layout: {0}".format(err))
+            return False
+
+    def reset_ps_window_layout(self):
+        layout_path = self.ps_layout_path()
+        if layout_path is not None and layout_path.exists():
+            try:
+                layout_path.unlink()
+            except Exception as err:
+                _display("[labcams_ps] Could not delete saved layout: {0}".format(err))
+        self._ps_restore_dock_layout()
+
     def add_priya_menu(self):
         """Menu actions for recovering Priya/labcams workflow docks."""
         if getattr(self, "_ps_priya_menu_added", False):
@@ -463,7 +503,9 @@ def _patch_gui_docks() -> None:
                 except Exception as err:
                     _display("[labcams_ps] Could not show histogram: {0}".format(err))
 
-        menu.addAction("Reset Priya Layout", self._ps_restore_dock_layout)
+        menu.addAction("Reset Priya Layout", self.reset_ps_window_layout)
+        menu.addAction("Save Window Layout", self.save_ps_window_layout)
+        menu.addAction("Load Window Layout", self.load_ps_window_layout)
         menu.addSeparator()
         menu.addAction("Show Acquire", lambda: show_dock_attr("recControllerTab", Qt.TopDockWidgetArea))
         menu.addAction("Show Camera View", show_camera)
@@ -489,6 +531,7 @@ def _patch_gui_docks() -> None:
         QTimer.singleShot(0, self._ps_hide_upstream_led_dock)
         QTimer.singleShot(0, self._ps_restore_dock_layout)
         QTimer.singleShot(250, self._ps_restore_dock_layout)
+        QTimer.singleShot(500, self.load_ps_window_layout)
 
     def add_session_save_dock(self):
         dock = QDockWidget("Session Save", self)
@@ -1307,6 +1350,10 @@ def _patch_gui_docks() -> None:
     gui.LabCamsGUI._ps_add_crop_dock = add_crop_dock
     gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
     gui.LabCamsGUI._ps_add_priya_menu = add_priya_menu
+    gui.LabCamsGUI.ps_layout_path = ps_layout_path
+    gui.LabCamsGUI.save_ps_window_layout = save_ps_window_layout
+    gui.LabCamsGUI.load_ps_window_layout = load_ps_window_layout
+    gui.LabCamsGUI.reset_ps_window_layout = reset_ps_window_layout
     gui.LabCamsGUI._ps_gui_docks_patch = True
 
 
@@ -1370,5 +1417,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
