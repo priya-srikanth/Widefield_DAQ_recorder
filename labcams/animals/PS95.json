@@ -25,7 +25,7 @@
       ]
     }
   ],
-  "recorder_path": "E:/labcams_data/20260604",
+  "recorder_path": "E:/labcams_data/20260821",
   "recorder_path_format": "{recorder_path}\\{filename}\\{subfolder}\\{dataname}_{run}_{nfiles}",
   "server": "udp",
   "server_port": 9999
