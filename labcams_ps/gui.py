@@ -359,6 +359,18 @@ def _patch_gui_docks() -> None:
 
     original_init_ui = gui.LabCamsGUI.initUI
 
+    original_restore_state = gui.LabCamsGUI.restoreState
+
+    def restore_state_without_stale_docks(self, *args, **kwargs):
+        """Ignore upstream saved dock state for the Priya rig wrapper.
+
+        The saved labcams QSettings state can hide the acquisition control and
+        Priya workflow docks immediately after they are created. Geometry is
+        still restored upstream; only stale dock placement is skipped.
+        """
+        _display("[labcams_ps] Ignoring saved Qt dock layout; using Priya rig layout.")
+        return False
+
     def hide_upstream_led_dock(self):
         upstream_led_dock = getattr(self, "camstim_tab", None)
         if upstream_led_dock is None:
@@ -377,6 +389,7 @@ def _patch_gui_docks() -> None:
         """
         self._ps_hide_upstream_led_dock()
         dock_specs = [
+            ("recControllerTab", Qt.TopDockWidgetArea),
             ("ps_session_save_dock", Qt.LeftDockWidgetArea),
             ("ps_preview_dock", Qt.LeftDockWidgetArea),
             ("ps_led_control_dock", Qt.LeftDockWidgetArea),
@@ -395,10 +408,13 @@ def _patch_gui_docks() -> None:
             visible_docks.append(dock)
         if visible_docks:
             try:
+                top_dock = getattr(self, "recControllerTab", None)
                 left_docks = [getattr(self, name, None) for name, area in dock_specs if area == Qt.LeftDockWidgetArea]
                 left_docks = [dock for dock in left_docks if dock is not None]
                 right_docks = [getattr(self, name, None) for name, area in dock_specs if area == Qt.RightDockWidgetArea]
                 right_docks = [dock for dock in right_docks if dock is not None]
+                if top_dock is not None:
+                    self.resizeDocks([top_dock], [120], Qt.Vertical)
                 if left_docks:
                     self.resizeDocks(left_docks, [260] * len(left_docks), Qt.Horizontal)
                 if right_docks:
@@ -1210,6 +1226,7 @@ def _patch_gui_docks() -> None:
         self.ps_alignment_dock = dock
 
     gui.LabCamsGUI.initUI = init_ui_with_ps_docks
+    gui.LabCamsGUI.restoreState = restore_state_without_stale_docks
     gui.LabCamsGUI._ps_hide_upstream_led_dock = hide_upstream_led_dock
     gui.LabCamsGUI._ps_restore_dock_layout = restore_ps_dock_layout
     gui.LabCamsGUI._ps_add_session_save_dock = add_session_save_dock
