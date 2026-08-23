@@ -426,23 +426,37 @@ def _patch_gui_docks() -> None:
             return Path(_CONFIG_PATH).with_suffix(".layout.bin")
         return None
 
+    def save_ps_window_layout_to_path(self, layout_path):
+        try:
+            layout_path = Path(layout_path)
+            layout_path.parent.mkdir(parents=True, exist_ok=True)
+            layout_path.write_bytes(bytes(self.saveState()))
+            _display("[labcams_ps] Saved window layout: {0}".format(layout_path))
+            return True
+        except Exception as err:
+            _display("[labcams_ps] Could not save window layout: {0}".format(err))
+            return False
+
     def save_ps_window_layout(self):
         layout_path = self.ps_layout_path()
         if layout_path is None:
             _display("[labcams_ps] No active config; cannot save window layout.")
             return
-        try:
-            layout_path.write_bytes(bytes(self.saveState()))
-            _display("[labcams_ps] Saved window layout: {0}".format(layout_path))
-        except Exception as err:
-            _display("[labcams_ps] Could not save window layout: {0}".format(err))
+        self.save_ps_window_layout_to_path(layout_path)
 
-    def load_ps_window_layout(self):
-        layout_path = self.ps_layout_path()
-        if layout_path is None or not layout_path.exists():
-            _display("[labcams_ps] No saved window layout for this config.")
-            return False
+    def save_ps_window_layout_as(self):
+        start_path = self.ps_layout_path()
+        if start_path is None:
+            start_path = Path.home() / "labcams.layout.bin"
+        filename, _filter = QFileDialog.getSaveFileName(
+            self, "Save labcams window layout as", str(start_path),
+            "Layout (*.layout.bin);;All files (*.*)")
+        if filename:
+            self.save_ps_window_layout_to_path(Path(filename))
+
+    def load_ps_window_layout_from_path(self, layout_path):
         try:
+            layout_path = Path(layout_path)
             from PyQt5.QtCore import QByteArray
             ok = original_restore_state(self, QByteArray(layout_path.read_bytes()))
             self._ps_hide_upstream_led_dock()
@@ -451,6 +465,22 @@ def _patch_gui_docks() -> None:
         except Exception as err:
             _display("[labcams_ps] Could not load window layout: {0}".format(err))
             return False
+
+    def load_ps_window_layout(self):
+        layout_path = self.ps_layout_path()
+        if layout_path is None or not layout_path.exists():
+            _display("[labcams_ps] No saved window layout for this config.")
+            return False
+        return self.load_ps_window_layout_from_path(layout_path)
+
+    def load_ps_window_layout_from_file(self):
+        start_dir = str(self.ps_layout_path().parent) if self.ps_layout_path() else ""
+        filename, _filter = QFileDialog.getOpenFileName(
+            self, "Load labcams window layout", start_dir,
+            "Layout (*.layout.bin);;All files (*.*)")
+        if not filename:
+            return False
+        return self.load_ps_window_layout_from_path(Path(filename))
 
     def reset_ps_window_layout(self):
         layout_path = self.ps_layout_path()
@@ -505,7 +535,9 @@ def _patch_gui_docks() -> None:
 
         menu.addAction("Reset Priya Layout", self.reset_ps_window_layout)
         menu.addAction("Save Window Layout", self.save_ps_window_layout)
+        menu.addAction("Save Window Layout As...", self.save_ps_window_layout_as)
         menu.addAction("Load Window Layout", self.load_ps_window_layout)
+        menu.addAction("Load Window Layout From File...", self.load_ps_window_layout_from_file)
         menu.addSeparator()
         menu.addAction("Show Acquire", lambda: show_dock_attr("recControllerTab", Qt.TopDockWidgetArea))
         menu.addAction("Show Camera View", show_camera)
@@ -1351,8 +1383,12 @@ def _patch_gui_docks() -> None:
     gui.LabCamsGUI._ps_add_alignment_dock = add_alignment_dock
     gui.LabCamsGUI._ps_add_priya_menu = add_priya_menu
     gui.LabCamsGUI.ps_layout_path = ps_layout_path
+    gui.LabCamsGUI.save_ps_window_layout_to_path = save_ps_window_layout_to_path
     gui.LabCamsGUI.save_ps_window_layout = save_ps_window_layout
+    gui.LabCamsGUI.save_ps_window_layout_as = save_ps_window_layout_as
+    gui.LabCamsGUI.load_ps_window_layout_from_path = load_ps_window_layout_from_path
     gui.LabCamsGUI.load_ps_window_layout = load_ps_window_layout
+    gui.LabCamsGUI.load_ps_window_layout_from_file = load_ps_window_layout_from_file
     gui.LabCamsGUI.reset_ps_window_layout = reset_ps_window_layout
     gui.LabCamsGUI._ps_gui_docks_patch = True
 
