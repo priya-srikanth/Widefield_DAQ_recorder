@@ -359,6 +359,18 @@ def _patch_gui_docks() -> None:
 
     original_init_ui = gui.LabCamsGUI.initUI
 
+    original_restore_state = gui.LabCamsGUI.restoreState
+
+    def restore_state_without_stale_docks(self, *args, **kwargs):
+        """Ignore upstream saved dock state for the Priya rig wrapper.
+
+        The saved labcams QSettings state can hide the acquisition control and
+        Priya workflow docks immediately after they are created. Geometry is
+        still restored upstream; only stale dock placement is skipped.
+        """
+        _display("[labcams_ps] Ignoring saved Qt dock layout; using Priya rig layout.")
+        return False
+
     def hide_upstream_led_dock(self):
         upstream_led_dock = getattr(self, "camstim_tab", None)
         if upstream_led_dock is None:
@@ -366,6 +378,56 @@ def _patch_gui_docks() -> None:
         self.removeDockWidget(upstream_led_dock)
         upstream_led_dock.hide()
         upstream_led_dock.setParent(None)
+
+    def restore_ps_dock_layout(self):
+        """Re-show Priya workflow docks after upstream restores stale Qt state.
+
+        labcams restores QSettings geometry/windowState after initUI(). If the
+        user previously closed a squeezed/hidden dock layout, Qt can hide or
+        collapse our docks just after they briefly appear. Re-applying our dock
+        layout from a zero-delay QTimer runs after that restoreState() call.
+        """
+        self._ps_hide_upstream_led_dock()
+        dock_specs = [
+            ("recControllerTab", Qt.TopDockWidgetArea),
+            ("ps_session_save_dock", Qt.LeftDockWidgetArea),
+            ("ps_preview_dock", Qt.LeftDockWidgetArea),
+            ("ps_led_control_dock", Qt.LeftDockWidgetArea),
+            ("ps_camera_crop_dock", Qt.RightDockWidgetArea),
+            ("ps_alignment_dock", Qt.RightDockWidgetArea),
+        ]
+        visible_docks = []
+        for attr, area in dock_specs:
+            dock = getattr(self, attr, None)
+            if dock is None:
+                continue
+            dock.setFloating(False)
+            self.addDockWidget(area, dock)
+            dock.show()
+            dock.raise_()
+            visible_docks.append(dock)
+        if visible_docks:
+            try:
+                top_dock = getattr(self, "recControllerTab", None)
+                left_docks = [getattr(self, name, None) for name, area in dock_specs if area == Qt.LeftDockWidgetArea]
+                left_docks = [dock for dock in left_docks if dock is not None]
+                right_docks = [getattr(self, name, None) for name, area in dock_specs if area == Qt.RightDockWidgetArea]
+                right_docks = [dock for dock in right_docks if dock is not None]
+                if top_dock is not None:
+                    self.resizeDocks([top_dock], [120], Qt.Vertical)
+                if left_docks:
+                    self.resizeDocks(left_docks, [260] * len(left_docks), Qt.Horizontal)
+                if right_docks:
+                    self.resizeDocks(right_docks, [300] * len(right_docks), Qt.Horizontal)
+            except Exception:
+                pass
+            try:
+                settings = getattr(self, "settings", None)
+                if settings is not None:
+                    settings.setValue("windowState", self.saveState())
+            except Exception:
+                pass
+            _display("[labcams_ps] Priya workflow docks restored after Qt layout restore.")
 
     def init_ui_with_ps_docks(self):
         original_init_ui(self)
@@ -376,7 +438,10 @@ def _patch_gui_docks() -> None:
         self._ps_add_crop_dock()
         self._ps_add_alignment_dock()
         QTimer.singleShot(0, self._ps_hide_upstream_led_dock)
+        QTimer.singleShot(0, self._ps_restore_dock_layout)
         QTimer.singleShot(500, self._ps_hide_upstream_led_dock)
+        QTimer.singleShot(750, self._ps_restore_dock_layout)
+        QTimer.singleShot(1500, self._ps_restore_dock_layout)
 
     def add_session_save_dock(self):
         dock = QDockWidget("Session Save", self)
@@ -1161,7 +1226,9 @@ def _patch_gui_docks() -> None:
         self.ps_alignment_dock = dock
 
     gui.LabCamsGUI.initUI = init_ui_with_ps_docks
+    gui.LabCamsGUI.restoreState = restore_state_without_stale_docks
     gui.LabCamsGUI._ps_hide_upstream_led_dock = hide_upstream_led_dock
+    gui.LabCamsGUI._ps_restore_dock_layout = restore_ps_dock_layout
     gui.LabCamsGUI._ps_add_session_save_dock = add_session_save_dock
     gui.LabCamsGUI._ps_add_preview_dock = add_preview_dock
     gui.LabCamsGUI._ps_add_led_control_dock = add_led_control_dock

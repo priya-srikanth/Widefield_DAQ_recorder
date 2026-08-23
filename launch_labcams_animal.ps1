@@ -11,7 +11,7 @@
 param([Parameter(Mandatory = $true)][string]$Animal)
 
 $ErrorActionPreference = "Stop"
-$repo = "C:\Github\Widefield_DAQ_recorder"
+$repo = $PSScriptRoot
 $template = Join-Path $repo "labcams\labcams_widefield_pco_trial_gated_acquire_enable.json"
 $animalDir = Join-Path $repo "labcams\animals"
 $cfg = Join-Path $animalDir "$Animal.json"
@@ -33,3 +33,4 @@ else {
 
 Set-Location $repo
 & $python -m labcams_ps.gui $cfg -w
+
