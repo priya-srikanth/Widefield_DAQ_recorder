@@ -376,7 +376,7 @@ def _patch_gui_docks() -> None:
     """Add Priya-rig workflow docks to the labcams GUI."""
 
     import labcams.gui as gui
-    from PyQt5.QtCore import QTimer, Qt
+    from PyQt5.QtCore import QEvent, QObject, QTimer, Qt
     from PyQt5.QtWidgets import (
         QFileDialog,
         QCheckBox,
@@ -626,12 +626,71 @@ def _patch_gui_docks() -> None:
         menu.addAction("Show Session Save", lambda: show_dock_attr("ps_session_save_dock"))
         self._ps_priya_menu_added = True
 
+    def install_single_led_acquire_warning(self):
+        """Confirm intentional single-wavelength recording before Acquire."""
+
+        controller = getattr(self, "recController", None)
+        acquire_button = getattr(controller, "saveButton", None)
+        if controller is None or acquire_button is None:
+            return
+
+        def single_led_name():
+            for camera in getattr(self, "cams", []):
+                trigger = getattr(camera, "excitation_trigger", None)
+                if trigger is None:
+                    continue
+                try:
+                    mode = int(trigger.mode.value)
+                except Exception:
+                    continue
+                if mode == 1:
+                    return "Violet / 415 nm"
+                if mode == 2:
+                    return "Blue / 470 nm"
+            return None
+
+        class SingleLedAcquireFilter(QObject):
+            def eventFilter(filter_self, watched, event):
+                starting = not controller.saveOnStartToggle.isChecked()
+                mouse_start = (
+                    event.type() == QEvent.MouseButtonPress
+                    and event.button() == Qt.LeftButton
+                )
+                key_start = (
+                    event.type() == QEvent.KeyPress
+                    and event.key() in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter)
+                )
+                if watched is acquire_button and starting and (mouse_start or key_start):
+                    led_name = single_led_name()
+                    if led_name is not None:
+                        answer = QMessageBox.warning(
+                            self,
+                            "Single LED channel armed",
+                            "You only have one LED channel armed ({0})!\n\n"
+                            "Do you want to proceed?".format(led_name),
+                            QMessageBox.Yes | QMessageBox.No,
+                            QMessageBox.No,
+                        )
+                        if answer != QMessageBox.Yes:
+                            _display(
+                                "[labcams_ps] Acquire cancelled: only {0} was armed.".format(
+                                    led_name
+                                )
+                            )
+                            event.accept()
+                            return True
+                return QObject.eventFilter(filter_self, watched, event)
+
+        self._ps_single_led_acquire_filter = SingleLedAcquireFilter(acquire_button)
+        acquire_button.installEventFilter(self._ps_single_led_acquire_filter)
+
     def init_ui_with_ps_docks(self):
         original_init_ui(self)
         self._ps_hide_upstream_led_dock()
         self._ps_add_session_save_dock()
         self._ps_add_preview_dock()
         self._ps_add_led_control_dock()
+        install_single_led_acquire_warning(self)
         self._ps_add_crop_dock()
         self._ps_add_alignment_dock()
         self._ps_add_priya_menu()
