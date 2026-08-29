@@ -173,7 +173,10 @@ If the labcams console shows `[CamStimTrigger] Unknown message: ...` after launc
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
+
 The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder. The labcams configs default `recorder_path` to `E:\labcams_data`; the Session Save dock overrides it per session.
+
+For alternating 415/470 acquisition, the raw binary filename should end in `_2_<height>_<width>_uint16.dat` even though each saved frame is a monochrome PCO image. The leading `2` is labcams' virtual wavelength-channel metadata used by downstream split/relabel steps. The PS wrapper now forces this metadata from the selected LED mode and prints an `Alternating LED save preflight` line when recording starts. If a new alternating session writes `_1_<height>_<width>_uint16.dat`, stop before a long run and check the LED mode/Teensy connection.
 
 Per-animal configs: the Session Save dock has `Save Config As...` and `Load Config...`. Set an animal's ROI (Camera Crop/ROI dock) and folder, then `Save Config As...` writes the current config to a new JSON (default `labcams\animals\<name>.json`) and makes it active, so the animal's ROI persists there day to day. `Load Config...` picks a config and relaunches labcams with it (a relaunch is required for camera settings like ROI to take effect). For first launch you can also use `launch_labcams_animal.ps1 <ANIMAL>`, which clones the template to `labcams\animals\<ANIMAL>.json` (full-frame) and launches it:
 

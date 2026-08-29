@@ -226,6 +226,91 @@ def _patch_pco_hwio4_status_expos() -> None:
 _ORIGINAL_CAMSTIM_PROCESS_MESSAGE = None
 
 
+
+_ORIGINAL_CAMERA_SET_SAVING = None
+_ORIGINAL_CAMERA_START_ACQUISITION = None
+
+
+def _expected_virtual_channels_for_camera(camera) -> int:
+    """Return the wavelength-channel count implied by the current LED mode."""
+
+    trigger = getattr(camera, "excitation_trigger", None)
+    if trigger is None:
+        return 1
+    try:
+        mode = int(trigger.mode.value)
+    except Exception:
+        mode = 3
+    return 2 if mode == 3 else 1
+
+
+def _set_camera_virtual_channels(camera, *, reason: str = "") -> int:
+    """Keep labcams BinaryWriter filename metadata aligned with LED mode.
+
+    PCO frames are monochrome. For alternating 415/470 acquisition, labcams
+    stores those monochrome frames as one stream but names the file with a
+    leading virtual-channel count (``_2_H_W_uint16.dat``) so downstream tools
+    split alternating frames correctly. If the Teensy channel-count query races
+    or fails, upstream labcams can fall back to ``_1_H_W_uint16.dat`` even while
+    the DAQ shows normal dual-LED alternation. Force the shared metadata here.
+    """
+
+    desired = _expected_virtual_channels_for_camera(camera)
+    trigger = getattr(camera, "excitation_trigger", None)
+    if trigger is not None and hasattr(trigger, "nchannels"):
+        try:
+            trigger.nchannels.value = desired
+        except Exception:
+            pass
+    writer = getattr(camera, "writer", None)
+    if writer is not None and hasattr(writer, "virtual_channels"):
+        try:
+            old = int(writer.virtual_channels.value)
+            if old != desired:
+                writer.virtual_channels.value = desired
+                suffix = " ({0})".format(reason) if reason else ""
+                _display(
+                    "[labcams_ps] Set writer virtual_channels {0} -> {1}{2}".format(
+                        old, desired, suffix
+                    )
+                )
+        except Exception as err:
+            _display("[labcams_ps] WARNING: Could not set writer virtual_channels: {0}".format(err))
+    return desired
+
+
+def _patch_camera_virtual_channel_guard() -> None:
+    """Prevent alternating LED sessions from being saved with _1_ filenames."""
+
+    global _ORIGINAL_CAMERA_SET_SAVING, _ORIGINAL_CAMERA_START_ACQUISITION
+    try:
+        import labcams.cams as cams
+    except Exception:
+        return
+
+    if getattr(cams.Camera, "_ps_virtual_channel_guard_patch", False):
+        return
+
+    _ORIGINAL_CAMERA_SET_SAVING = cams.Camera.set_saving
+    _ORIGINAL_CAMERA_START_ACQUISITION = cams.Camera.start_acquisition
+
+    def set_saving_with_virtual_channel_guard(self, value):
+        if value:
+            desired = _set_camera_virtual_channels(self, reason="before saving")
+            if desired == 2:
+                _display(
+                    "[labcams_ps] Alternating LED save preflight: expected dat suffix _2_{H}_{W}_uint16.dat"
+                )
+        return _ORIGINAL_CAMERA_SET_SAVING(self, value)
+
+    def start_acquisition_with_virtual_channel_guard(self):
+        _set_camera_virtual_channels(self, reason="before acquisition")
+        return _ORIGINAL_CAMERA_START_ACQUISITION(self)
+
+    cams.Camera.set_saving = set_saving_with_virtual_channel_guard
+    cams.Camera.start_acquisition = start_acquisition_with_virtual_channel_guard
+    cams.Camera._ps_virtual_channel_guard_patch = True
+
 def _patch_pyqtgraph_nan_downsample() -> None:
     """Avoid noisy non-fatal ImageItem NaN downsample tracebacks on startup."""
 
@@ -961,12 +1046,28 @@ def _patch_gui_docks() -> None:
         def apply_mode(index):
             if index < 0:
                 return
-            trigger.set_mode(int(mode_combo.currentData()))
+            mode = int(mode_combo.currentData())
+            trigger.set_mode(mode)
+            # Set this synchronously too. The Teensy acknowledgement is async,
+            # but the writer filename needs to be correct before Record opens
+            # the .dat file. Mode 3 is alternating 415/470; modes 1/2 are single
+            # wavelength preview/recording.
+            try:
+                trigger.mode.value = mode
+                trigger.nchannels.value = 2 if mode == 3 else 1
+            except Exception:
+                pass
+            for cam in self.cams:
+                if getattr(cam, "excitation_trigger", None) is trigger:
+                    _set_camera_virtual_channels(cam, reason="LED mode changed")
             trigger.check_nchannels()
             status.setText("Mode: {0}".format(mode_combo.currentText()))
             _display("[labcams_ps] LED mode set to {0}".format(mode_combo.currentText()))
 
         def arm_leds():
+            for cam in self.cams:
+                if getattr(cam, "excitation_trigger", None) is trigger:
+                    _set_camera_virtual_channels(cam, reason="LED arm")
             trigger.arm()
             status.setText("Armed: {0}".format(mode_combo.currentText()))
             _display("[labcams_ps] LED trigger armed")
@@ -1414,6 +1515,7 @@ def apply_camera_process_patches() -> None:
 
     _patch_offline_pco()
     _patch_pco_hwio4_status_expos()
+    _patch_camera_virtual_channel_guard()
 
 
 def apply_patches() -> None:
@@ -1453,6 +1555,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
 
