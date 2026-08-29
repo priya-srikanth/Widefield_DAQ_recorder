@@ -226,22 +226,20 @@ def _patch_pco_hwio4_status_expos() -> None:
 _ORIGINAL_CAMSTIM_PROCESS_MESSAGE = None
 
 
-
 _ORIGINAL_CAMERA_SET_SAVING = None
-_ORIGINAL_CAMERA_START_ACQUISITION = None
 
 
-def _expected_virtual_channels_for_camera(camera) -> int:
-    """Return the wavelength-channel count implied by the current LED mode."""
+def _expected_virtual_channels_for_camera(camera):
+    """Return 2 only for an explicitly selected alternating LED mode."""
 
     trigger = getattr(camera, "excitation_trigger", None)
     if trigger is None:
-        return 1
+        return None
     try:
         mode = int(trigger.mode.value)
     except Exception:
-        mode = 3
-    return 2 if mode == 3 else 1
+        return None
+    return 2 if mode == 3 else None
 
 
 def _set_camera_virtual_channels(camera, *, reason: str = "") -> int:
@@ -256,12 +254,9 @@ def _set_camera_virtual_channels(camera, *, reason: str = "") -> int:
     """
 
     desired = _expected_virtual_channels_for_camera(camera)
-    trigger = getattr(camera, "excitation_trigger", None)
-    if trigger is not None and hasattr(trigger, "nchannels"):
-        try:
-            trigger.nchannels.value = desired
-        except Exception:
-            pass
+    if desired is None:
+        return None
+
     writer = getattr(camera, "writer", None)
     if writer is not None and hasattr(writer, "virtual_channels"):
         try:
@@ -282,7 +277,7 @@ def _set_camera_virtual_channels(camera, *, reason: str = "") -> int:
 def _patch_camera_virtual_channel_guard() -> None:
     """Prevent alternating LED sessions from being saved with _1_ filenames."""
 
-    global _ORIGINAL_CAMERA_SET_SAVING, _ORIGINAL_CAMERA_START_ACQUISITION
+    global _ORIGINAL_CAMERA_SET_SAVING
     try:
         import labcams.cams as cams
     except Exception:
@@ -292,7 +287,6 @@ def _patch_camera_virtual_channel_guard() -> None:
         return
 
     _ORIGINAL_CAMERA_SET_SAVING = cams.Camera.set_saving
-    _ORIGINAL_CAMERA_START_ACQUISITION = cams.Camera.start_acquisition
 
     def set_saving_with_virtual_channel_guard(self, value):
         if value:
@@ -303,12 +297,8 @@ def _patch_camera_virtual_channel_guard() -> None:
                 )
         return _ORIGINAL_CAMERA_SET_SAVING(self, value)
 
-    def start_acquisition_with_virtual_channel_guard(self):
-        _set_camera_virtual_channels(self, reason="before acquisition")
-        return _ORIGINAL_CAMERA_START_ACQUISITION(self)
 
     cams.Camera.set_saving = set_saving_with_virtual_channel_guard
-    cams.Camera.start_acquisition = start_acquisition_with_virtual_channel_guard
     cams.Camera._ps_virtual_channel_guard_patch = True
 
 def _patch_pyqtgraph_nan_downsample() -> None:
@@ -1046,28 +1036,12 @@ def _patch_gui_docks() -> None:
         def apply_mode(index):
             if index < 0:
                 return
-            mode = int(mode_combo.currentData())
-            trigger.set_mode(mode)
-            # Set this synchronously too. The Teensy acknowledgement is async,
-            # but the writer filename needs to be correct before Record opens
-            # the .dat file. Mode 3 is alternating 415/470; modes 1/2 are single
-            # wavelength preview/recording.
-            try:
-                trigger.mode.value = mode
-                trigger.nchannels.value = 2 if mode == 3 else 1
-            except Exception:
-                pass
-            for cam in self.cams:
-                if getattr(cam, "excitation_trigger", None) is trigger:
-                    _set_camera_virtual_channels(cam, reason="LED mode changed")
+            trigger.set_mode(int(mode_combo.currentData()))
             trigger.check_nchannels()
             status.setText("Mode: {0}".format(mode_combo.currentText()))
             _display("[labcams_ps] LED mode set to {0}".format(mode_combo.currentText()))
 
         def arm_leds():
-            for cam in self.cams:
-                if getattr(cam, "excitation_trigger", None) is trigger:
-                    _set_camera_virtual_channels(cam, reason="LED arm")
             trigger.arm()
             status.setText("Armed: {0}".format(mode_combo.currentText()))
             _display("[labcams_ps] LED trigger armed")
