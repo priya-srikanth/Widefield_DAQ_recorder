@@ -135,7 +135,7 @@ python .\diagnose_hardware.py --seconds 10
 
 ### 2pRAM PCIe-6353
 
-The 2pRAM profile retains the recorder's 5 kHz sampling, 1,000-sample block, 60-second display, and compact HDF5 storage settings. Its channel names and terminal assignments come from the rig's Janelia WaveSurfer profile.
+The 2pRAM profile retains the recorder's 5 kHz sampling, 1,000-sample block, 60-second display, and compact HDF5 storage settings. Its channel mapping was initialized from the rig's Janelia WaveSurfer profile and then adapted for the current recorder setup. The channel editor provides all 16 differential analog-input rows and all 32 hardware-timed `port0` digital-input rows supported by this profile.
 
 ```powershell
 conda activate widefield-daq
@@ -173,10 +173,7 @@ If the labcams console shows `[CamStimTrigger] Unknown message: ...` after launc
 
 The upstream `labcams` package remains installed in the conda `labcams` environment; this repository does not rename or vendor the upstream package. For convenience, `launch_labcams_ps.bat` runs the same wrapper command.
 
-
 The `labcams_ps` GUI also adds a `Session Save` dock. Choose an output folder, enter a prefix such as `PS94_pre_stroke`, and click `Apply Save Name` before recording. The wrapper sets the labcams session name to `prefix_YYYYMMDD_HHMMSS` and updates camera writers to use the selected folder. The labcams configs default `recorder_path` to `E:\labcams_data`; the Session Save dock overrides it per session.
-
-For alternating 415/470 acquisition, the raw binary filename should end in `_2_<height>_<width>_uint16.dat` even though each saved frame is a monochrome PCO image. The leading `2` is labcams' virtual wavelength-channel metadata used by downstream split/relabel steps. The PS wrapper now forces this metadata from the selected LED mode and prints an `Alternating LED save preflight` line when recording starts. If a new alternating session writes `_1_<height>_<width>_uint16.dat`, stop before a long run and check the LED mode/Teensy connection.
 
 Per-animal configs: the Session Save dock has `Save Config As...` and `Load Config...`. Set an animal's ROI (Camera Crop/ROI dock) and folder, then `Save Config As...` writes the current config to a new JSON (default `labcams\animals\<name>.json`) and makes it active, so the animal's ROI persists there day to day. `Load Config...` picks a config and relaunches labcams with it (a relaunch is required for camera settings like ROI to take effect). For first launch you can also use `launch_labcams_animal.ps1 <ANIMAL>`, which clones the template to `labcams\animals\<ANIMAL>.json` (full-frame) and launches it:
 
@@ -278,7 +275,7 @@ The app uses analog input acquisition as the master timing source. Digital input
 
 On devices that support it, DI start can be aligned to the AI start trigger. On devices that reject a DI start trigger, the app starts DI before AI; samples remain aligned because DI is still clocked by the AI sample clock.
 
-The validated hardware paths are the NI USB-6366 on `Dev2` for widefield imaging and the NI PCIe-6353 named `PCIe-6353` for 2pRAM. The PCIe-6353 multiplexes analog channels rather than sampling them simultaneously; its configured 10 channels at 5 kHz require 50 kS/s aggregate, comfortably below the device's 1.25 MS/s maximum. Earlier PCIe-6259/BNC-2110 work remains useful context but is not a current profile.
+The validated hardware paths are the NI USB-6366 on `Dev2` for widefield imaging and the NI PCIe-6353 named `PCIe-6353` for 2pRAM. The PCIe-6353 multiplexes analog channels rather than sampling them simultaneously; its current 8 enabled channels at 5 kHz require 40 kS/s aggregate, comfortably below the device's 1.25 MS/s maximum. Earlier PCIe-6259/BNC-2110 work remains useful context but is not a current profile.
 
 ## Display Order
 
@@ -364,3 +361,4 @@ During recording, the writer updates `sample_count` and flushes the HDF5 file ab
 - No WaveSurfer-style stimulus generation or trigger protocol system.
 - No camera, LED, or behavior control.
 - HDF5 files created by older versions of this app may use `/analog/samples`, `/digital/samples`, and `/sample_index` instead of the compact layout above.
+
