@@ -10,27 +10,128 @@
   "analog_storage": "int16_scaled",
   "simulate": false,
   "analog_channels": [
-    {"name": "Acc_(x)", "physical_channel": "ai17", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Acc_(y)", "physical_channel": "ai18", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Acc_(z)", "physical_channel": "ai19", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Y_galvo", "physical_channel": "ai7", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Trial_start", "physical_channel": "ai0", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Tone", "physical_channel": "ai1", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Left_lick", "physical_channel": "ai3", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Right_lick", "physical_channel": "ai4", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "Treadmill", "physical_channel": "ai6", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"},
-    {"name": "ENL_duration", "physical_channel": "ai2", "enabled": true, "min_val": -10.0, "max_val": 10.0, "scale": 1.0, "terminal_config": "DIFF"}
+    {
+      "name": "Acc_(x)",
+      "physical_channel": "ai17",
+      "enabled": true,
+      "min_val": -10.0,
+      "max_val": 10.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Acc_(y)",
+      "physical_channel": "ai18",
+      "enabled": true,
+      "min_val": -10.0,
+      "max_val": 10.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Acc_(z)",
+      "physical_channel": "ai19",
+      "enabled": true,
+      "min_val": -10.0,
+      "max_val": 10.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Y_galvo",
+      "physical_channel": "ai7",
+      "enabled": true,
+      "min_val": -10.0,
+      "max_val": 10.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Trial_start",
+      "physical_channel": "ai0",
+      "enabled": true,
+      "min_val": -10.0,
+      "max_val": 10.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Tone",
+      "physical_channel": "ai1",
+      "enabled": true,
+      "min_val": -10.0,
+      "max_val": 10.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Left_lick",
+      "physical_channel": "ai3",
+      "enabled": true,
+      "min_val": -1.0,
+      "max_val": 5.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Right_lick",
+      "physical_channel": "ai4",
+      "enabled": false,
+      "min_val": -1.0,
+      "max_val": 5.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    },
+    {
+      "name": "Position_bit_0",
+      "physical_channel": "ai2",
+      "enabled": true,
+      "min_val": -1.0,
+      "max_val": 5.0,
+      "scale": 1.0,
+      "terminal_config": "DIFF"
+    }
   ],
   "digital_channels": [
-    {"name": "Frame_clock", "physical_channel": "port0/line0", "enabled": true},
-    {"name": "Confirm_acq_trigger", "physical_channel": "port0/line1", "enabled": true},
-    {"name": "Left_reward", "physical_channel": "port0/line3", "enabled": true},
-    {"name": "Right_reward", "physical_channel": "port0/line4", "enabled": true},
-    {"name": "Sync_pulse", "physical_channel": "port0/line2", "enabled": true}
+    {
+      "name": "Frame_clock",
+      "physical_channel": "port0/line0",
+      "enabled": true
+    },
+    {
+      "name": "Confirm_acq_trigger",
+      "physical_channel": "port0/line1",
+      "enabled": true
+    },
+    {
+      "name": "Left_reward",
+      "physical_channel": "port0/line3",
+      "enabled": true
+    },
+    {
+      "name": "Right_reward",
+      "physical_channel": "port0/line4",
+      "enabled": false
+    },
+    {
+      "name": "Sync_pulse",
+      "physical_channel": "port0/line2",
+      "enabled": true
+    }
   ],
   "display_order": [
-    "ai:ai17", "ai:ai18", "ai:ai19", "ai:ai7", "ai:ai0", "ai:ai1",
-    "ai:ai3", "ai:ai4", "ai:ai6", "ai:ai2", "di:port0/line0",
-    "di:port0/line1", "di:port0/line3", "di:port0/line4", "di:port0/line2"
+    "ai:ai17",
+    "ai:ai18",
+    "ai:ai19",
+    "ai:ai7",
+    "ai:ai0",
+    "ai:ai1",
+    "ai:ai3",
+    "ai:ai2",
+    "di:port0/line0",
+    "di:port0/line1",
+    "di:port0/line3",
+    "di:port0/line2"
   ]
 }
+
