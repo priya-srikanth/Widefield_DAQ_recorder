@@ -135,7 +135,7 @@ python .\diagnose_hardware.py --seconds 10
 
 ### 2pRAM PCIe-6353
 
-The 2pRAM profile retains the recorder's 5 kHz sampling, 1,000-sample block, 60-second display, and compact HDF5 storage settings. Its channel names and terminal assignments come from the rig's Janelia WaveSurfer profile.
+The 2pRAM profile retains the recorder's 5 kHz sampling, 1,000-sample block, 60-second display, and compact HDF5 storage settings. Its channel mapping was initialized from the rig's Janelia WaveSurfer profile and then adapted for the current recorder setup. The channel editor provides all 16 differential analog-input rows and all 32 hardware-timed `port0` digital-input rows supported by this profile.
 
 ```powershell
 conda activate widefield-daq
@@ -278,7 +278,7 @@ The app uses analog input acquisition as the master timing source. Digital input
 
 On devices that support it, DI start can be aligned to the AI start trigger. On devices that reject a DI start trigger, the app starts DI before AI; samples remain aligned because DI is still clocked by the AI sample clock.
 
-The validated hardware paths are the NI USB-6366 on `Dev2` for widefield imaging and the NI PCIe-6353 named `PCIe-6353` for 2pRAM. The PCIe-6353 multiplexes analog channels rather than sampling them simultaneously; its configured 10 channels at 5 kHz require 50 kS/s aggregate, comfortably below the device's 1.25 MS/s maximum. Earlier PCIe-6259/BNC-2110 work remains useful context but is not a current profile.
+The validated hardware paths are the NI USB-6366 on `Dev2` for widefield imaging and the NI PCIe-6353 named `PCIe-6353` for 2pRAM. The PCIe-6353 multiplexes analog channels rather than sampling them simultaneously; its current 8 enabled channels at 5 kHz require 40 kS/s aggregate, comfortably below the device's 1.25 MS/s maximum. Earlier PCIe-6259/BNC-2110 work remains useful context but is not a current profile.
 
 ## Display Order
 

@@ -423,7 +423,10 @@ class RecorderApp(tk.Tk):
         headers = ["On", "Name", "Physical", "Min", "Max", "Scale", "Mode"]
         for col, text in enumerate(headers):
             ttk.Label(parent, text=text).grid(row=0, column=col, sticky="w", padx=2)
-        for idx in range(8):
+        # The PCIe-6353 exposes up to 16 differential analog inputs. Keep
+        # enough editable rows available so a full eight-channel config still
+        # has room for channels added from the GUI.
+        for idx in range(16):
             row = idx + 1
             enabled = tk.BooleanVar(value=False)
             name = tk.StringVar()
@@ -445,7 +448,9 @@ class RecorderApp(tk.Tk):
         headers = ["On", "Name", "Physical"]
         for col, text in enumerate(headers):
             ttk.Label(parent, text=text).grid(row=0, column=col, sticky="w", padx=2)
-        for idx in range(12):
+        # Port 0 spans both physical connectors on the PCIe-6353 and provides
+        # 32 hardware-timed digital lines (port0/line0 through line31).
+        for idx in range(32):
             row = idx + 1
             enabled = tk.BooleanVar(value=False)
             name = tk.StringVar()
