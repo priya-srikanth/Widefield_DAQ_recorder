@@ -90,4 +90,3 @@ On 2026-08-09 the initial profile was verified on the installed PCIe-6353 under 
 
 - [NI PCIe-6353 product specifications](https://www.ni.com/en/shop/hardware/voltage/model-pcie-6353)
 - [Widefield USB-6366 profile](../README.md#recorder-profiles)
-
