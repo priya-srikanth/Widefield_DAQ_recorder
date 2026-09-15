@@ -361,4 +361,3 @@ During recording, the writer updates `sample_count` and flushes the HDF5 file ab
 - No WaveSurfer-style stimulus generation or trigger protocol system.
 - No camera, LED, or behavior control.
 - HDF5 files created by older versions of this app may use `/analog/samples`, `/digital/samples`, and `/sample_index` instead of the compact layout above.
-
